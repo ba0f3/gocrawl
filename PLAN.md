@@ -1,18 +1,103 @@
-### **Instruction for Code Agent: Go Web Crawler with Colly and Firecrawl API**
+### **Instruction for Code Agent: Firecrawl-like Go Web Crawler**
 
-**Objective:**
-Generate a complete, production-ready Go application that functions as a web crawler and scraper.
-The application will use the `gocolly/colly` library to crawl websites and the Firecrawl API to extract clean, AI-ready content in Markdown format from each crawled page.
+**Objective:**  
+Build a production-grade Go application that functions as an independent web crawler/scraper and exposes its own Firecrawl-style API. The system should NOT rely on the Firecrawl cloud service: all crawling, extraction, formatting, and API functionality must be implemented in-house, based on open source libraries and your own logic.
 
-**Core Requirements:**
-1.  **Crawler/Scraper Engine:** Use `github.com/gocolly/colly/v2`.
-2.  **API Service:** Expose an API endpoint that accepts a URL and returns the scraped Markdown content, adopt Firecrawl API.
-3.  **Configuration:** Manage API keys and target URLs securely using `github.com/spf13/viper` with environment variables and a `.env` file.
-4.  **Project Structure:** Adhere to the specified modular project structure.
-5.  **Output:** Save the scraped Markdown content from each page into sqlite database, automatic clear old data.
-6.  **Database:** Use `github.com/mattn/go-sqlite3` to interact with the sqlite database.
-7.  **Context:** Use context7 to update Firecrawl API document.
-8.  **User Management:** Add user management feature, user can register, login, and manage their API keys.
+**Core Requirements:**  
+1.  **Crawler/Scraper Engine:** Use `github.com/gocolly/colly/v2` for crawling and scraping, extracting readable content for AI/Markdown conversion.
+2.  **API Service:** Expose endpoints that mirror Firecrawl's API contract (`/api/v1/scrape`, `/api/v1/crawl`, `/api/v1/crawl/{id}`), returning compatible requests and responses, but fully powered by your own backend.
+3.  **Content Extraction & Markdown:** Extract clean, readable main content from crawled pages and format it as Markdown. Use suitable Go libraries or in-house logic (e.g., go-readability, goldmark, etc). Include metadata, links, images, etc. in the output structure as per Firecrawl's response format.
+4.  **Configuration:** Manage API keys, environment, and target URLs securely with `github.com/spf13/viper` using a `.env` file.
+5.  **Project Structure:** Use a modular, idiomatic Go project layout (see example structure below).
+6.  **Persistence:** Store users, API keys, crawl tasks, and results in an SQLite database. Old crawl data should be automatically purged.
+7.  **User Management:** Implement a registration/login system. Users can view, generate, and revoke their API keys.
+8.  **Status & Progress:** For long-running crawls, persist and expose crawl progress and batch results.
+9.  **Security:** Require API keys for all endpoints, encrypt/hide all secrets, validate all user input.
+10. **Testing & Documentation:** Provide basic tests for all major modules and developer docs/usage guide.
+
+---
+
+**Project Structure:**  
+Generate the following directory and file structure. Each module should include robust tests (where possible) and clear developer documentation.
+
+```
+gocrawl/
+├── cmd/
+│   └── main.go                   # App entrypoint (start server, load config)
+├── internal/
+│   ├── config/
+│   │   └── config.go             # Configuration loading & validation
+│   ├── crawler/
+│   │   └── colly.go              # Crawler logic using gocolly
+│   ├── extractor/
+│   │   └── markdown.go           # HTML → Markdown + metadata extraction
+│   ├── api/
+│   │   ├── routes.go             # HTTP API logic, endpoints
+│   │   └── middleware.go         # Auth, rate-limit, error handling
+│   ├── user/
+│   │   └── user.go               # Registration, login, API key management
+│   └── db/
+│       └── sqlite.go             # DB logic for crawl tasks, results, users, API keys
+├── .env                          # Sample env vars (never commit secrets)
+├── go.mod
+├── README.md
+└── api_spec.md                   # (Optional) HTTP contract, example requests/responses
+```
+
+---
+
+**API Endpoints (Firecrawl-like contract, implemented in-house):**
+
+- **POST `/api/v1/scrape`** – Scrape a single page. Accepts a JSON payload mirroring Firecrawl's structure (fields like `url`, extraction options, output format). Returns Markdown, HTML, metadata, etc., according to the spec below (see example response).
+
+- **POST `/api/v1/crawl`** – Start a multi-page/domain crawl with options for depth, concurrency, path restrictions, and scrape options. Returns a crawl job ID on success.
+
+- **GET `/api/v1/crawl/{id}`** – Get progress or final results for a batch crawl. Returns list of results (Markdown, metadata, etc.) and crawl status.
+
+> All endpoints require a valid API key. Inputs must be validated and sanitized. See `api_spec.md` for full example request/response JSON.
+
+**Example Request/Response:**  
+(Use same structure as Firecrawl’s, but generated by your backend)
+
+```json
+// POST /api/v1/scrape request
+{
+  "url": "https://example.com/article",
+  "onlyMainContent": true,
+  "includeTags": ["main"],
+  "formats": ["markdown"]
+}
+```
+
+```json
+// POST /api/v1/scrape response
+{
+  "success": true,
+  "data": {
+    "markdown": "...extracted markdown...",
+    "html": "...clean HTML...",
+    "metadata": {
+      "title": "My Article",
+      "description": "...",
+      "statusCode": 200,
+      "sourceURL": "https://example.com/article"
+    },
+    "links": ["https://..."]
+    /* ...etc... (match Firecrawl’s contract as closely as possible) */
+  }
+}
+```
+See included `api_spec.md` for each endpoint’s shape and options.
+
+**User Management:**
+- Endpoints for user registration, login, profile, and API key management.
+- Enforce authentication/authorization on all crawl/scrape routes.
+
+**Status/Progress:**
+- Store jobs in DB; batch crawl status/progress is available via `/crawl/{id}` until purged by retention policy.
+- Document how unfinished/failed/cancelled jobs are handled.
+
+---
 
 **Project Structure:**
 Generate the following directory and file structure:
