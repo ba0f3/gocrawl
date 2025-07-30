@@ -57,6 +57,9 @@ func CrawlURL(req *CrawlRequest) (*CrawlResult, error) {
 		rawHTML, _ := e.DOM.Html()
 		result.RawHTML = rawHTML
 
+		// Remove script and style tags
+		e.DOM.Find("script, style").Remove()
+
 		// Extract main content
 		var contentHTML string
 		if req.OnlyMainContent {
