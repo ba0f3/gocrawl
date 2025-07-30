@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  gocrawl:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+      - MONGO_URI=mongodb://mongo:27017
+      - DB_NAME=gocrawl
+      - JWT_SECRET=your-secret-key-here
+      - DISABLE_AUTH=false
+      - MAX_CONCURRENT_CRAWLS=10
+      - CRAWL_TIMEOUT=30s
+      - USER_AGENT=GoCrawl/1.0
+      - DATA_RETENTION_DAYS=30
+      - CLEANUP_INTERVAL=24h
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_WINDOW=1h
+      # Proxy configuration (uncomment and configure as needed)
+      # - PROXIES=http://proxy1:port,http://proxy2:port
+      # - ENABLE_PROXY_ROTATION=true
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=gocrawl
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

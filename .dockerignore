@@ -1,0 +1,19 @@
+# Exclude version control files
+.git
+.gitignore
+
+# Exclude local development files
+.idea
+.vscode
+
+# Exclude documentation
+*.md
+
+# Exclude temporary files
+*.tmp
+*.swp
+
+# Exclude the Dockerfile itself
+Dockerfile
+.dockerignore
+
