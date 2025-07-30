@@ -30,7 +30,7 @@ func main() {
 	}
 
 	var database *db.Database
-	
+
 	// Initialize database only if authentication is enabled
 	if !cfg.Security.DisableAuth {
 		var err error
@@ -45,7 +45,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Failed to create indexes:", err)
 		}
-		
+
 		// Start cleanup routine
 		go database.StartCleanupRoutine(cfg.Retention)
 	} else {
@@ -59,7 +59,7 @@ func main() {
 	router := mux.NewRouter()
 
 	// API routes
-	apiRouter := router.PathPrefix("/api/v1").Subrouter()
+	apiRouter := router.PathPrefix("/v1").Subrouter()
 
 	// User management routes (always available)
 	apiRouter.HandleFunc("/auth/register", handler.Register).Methods("POST")
@@ -90,4 +90,3 @@ func main() {
 		log.Fatal("Server failed to start:", err)
 	}
 }
-
