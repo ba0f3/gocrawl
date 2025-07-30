@@ -4,10 +4,12 @@ import (
 	"net/url"
 	"time"
 
+	"gocrawl/internal/config"
 	"gocrawl/internal/extractor"
 
 	"github.com/gocolly/colly/v2"
 	"github.com/gocolly/colly/v2/debug"
+	"github.com/gocolly/colly/v2/proxy"
 )
 
 // CrawlResult holds the result of a crawl
@@ -31,7 +33,7 @@ type CrawlRequest struct {
 }
 
 // CrawlURL crawls a specific URL and extracts the main content
-func CrawlURL(req *CrawlRequest) (*CrawlResult, error) {
+func CrawlURL(req *CrawlRequest, cfg *config.Config) (*CrawlResult, error) {
 	c := colly.NewCollector(
 		colly.Debugger(&debug.LogDebugger{}),
 	)
@@ -40,11 +42,22 @@ func CrawlURL(req *CrawlRequest) (*CrawlResult, error) {
 	timeout := 30 * time.Second
 	if req.Timeout > 0 {
 		timeout = time.Duration(req.Timeout) * time.Second
+	} else if cfg.Crawler.CrawlTimeout > 0 {
+		timeout = cfg.Crawler.CrawlTimeout
 	}
 	c.SetRequestTimeout(timeout)
 
-	// Set user agent
-	c.UserAgent = "GoCrawl/1.0"
+	// Set user agent from config
+	c.UserAgent = cfg.Crawler.UserAgent
+
+	// Setup proxy rotation if enabled and proxies are configured
+	if cfg.Crawler.EnableProxyRotation && len(cfg.Crawler.Proxies) > 0 {
+		rps, err := proxy.RoundRobinProxySwitcher(cfg.Crawler.Proxies...)
+		if err != nil {
+			return nil, err
+		}
+		c.SetProxyFunc(rps)
+	}
 
 	result := &CrawlResult{
 		Links:    []string{},
@@ -56,9 +69,6 @@ func CrawlURL(req *CrawlRequest) (*CrawlResult, error) {
 		// Get raw HTML
 		rawHTML, _ := e.DOM.Html()
 		result.RawHTML = rawHTML
-
-		// Remove script and style tags
-		e.DOM.Find("script, style").Remove()
 
 		// Extract main content
 		var contentHTML string

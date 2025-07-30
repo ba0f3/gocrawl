@@ -35,6 +35,8 @@ type CrawlerConfig struct {
 	MaxConcurrentCrawls int
 	CrawlTimeout        time.Duration
 	UserAgent          string
+	Proxies            []string
+	EnableProxyRotation bool
 }
 
 type RetentionConfig struct {
@@ -66,6 +68,8 @@ func Load() (*Config, error) {
 			MaxConcurrentCrawls: viper.GetInt("MAX_CONCURRENT_CRAWLS"),
 			CrawlTimeout:        viper.GetDuration("CRAWL_TIMEOUT"),
 			UserAgent:          viper.GetString("USER_AGENT"),
+			Proxies:            viper.GetStringSlice("PROXIES"),
+			EnableProxyRotation: viper.GetBool("ENABLE_PROXY_ROTATION"),
 		},
 		Retention: RetentionConfig{
 			DataRetentionDays: viper.GetInt("DATA_RETENTION_DAYS"),

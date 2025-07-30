@@ -93,7 +93,7 @@ func (h *Handler) Scrape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := crawler.CrawlURL(&req)
+	result, err := crawler.CrawlURL(&req, h.Cfg)
 	if err != nil {
 		writeResponse(w, http.StatusInternalServerError, nil, err)
 		return
