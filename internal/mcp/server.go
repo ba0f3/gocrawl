@@ -11,13 +11,17 @@ import (
 	"gocrawl/internal/crawler"
 	"gocrawl/internal/db"
 
-	"github.com/modelcontextprotocol/go-sdk/pkg/server"
-	"github.com/modelcontextprotocol/go-sdk/pkg/types"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// ptr returns a pointer to the given value
+func ptr[T any](v T) *T {
+	return &v
+}
 
 // MCPServer represents the MCP server instance
 type MCPServer struct {
-	server   *server.MCPServer
+	server   *mcp.Server
 	db       *db.Database
 	cfg      *config.Config
 	crawlJobs map[string]*CrawlJob
@@ -35,16 +39,30 @@ type CrawlJob struct {
 	Error     string
 }
 
+// ScrapeArgs represents the arguments for the scrape tool
+type ScrapeArgs struct {
+	URL             string   `json:"url" mcp:"URL to scrape"`
+	OnlyMainContent bool     `json:"onlyMainContent" mcp:"Extract only main content"`
+	Formats         []string `json:"formats" mcp:"Output formats (markdown, html, rawHtml)"`
+	Timeout         int      `json:"timeout" mcp:"Timeout in seconds"`
+}
+
+// CrawlArgs represents the arguments for the crawl tool
+type CrawlArgs struct {
+	URL      string `json:"url" mcp:"Starting URL for crawl"`
+	MaxDepth int    `json:"maxDepth" mcp:"Maximum crawl depth"`
+	MaxPages int    `json:"maxPages" mcp:"Maximum pages to crawl"`
+}
+
 // NewMCPServer creates a new MCP server instance
 func NewMCPServer(database *db.Database, cfg *config.Config) (*MCPServer, error) {
-	mcpServer := server.NewMCPServer(
-		"gocrawl-mcp",
-		"1.0.0",
-		server.WithLogging(),
-	)
+	server := mcp.NewServer(&mcp.Implementation{
+		Name:    "gocrawl-mcp",
+		Version: "1.0.0",
+	}, nil)
 
 	s := &MCPServer{
-		server:    mcpServer,
+		server:    server,
 		db:        database,
 		cfg:       cfg,
 		crawlJobs: make(map[string]*CrawlJob),
@@ -59,117 +77,51 @@ func NewMCPServer(database *db.Database, cfg *config.Config) (*MCPServer, error)
 // registerTools registers all MCP tools
 func (s *MCPServer) registerTools() {
 	// Scrape tool
-	s.server.AddTool(
-		"scrape",
-		"Scrape a single web page and extract content",
-		map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"url": map[string]interface{}{
-					"type":        "string",
-					"description": "URL to scrape",
-				},
-				"onlyMainContent": map[string]interface{}{
-					"type":        "boolean",
-					"description": "Extract only main content",
-					"default":     true,
-				},
-				"formats": map[string]interface{}{
-					"type":        "array",
-					"description": "Output formats (markdown, html, rawHtml)",
-					"items": map[string]interface{}{
-						"type": "string",
-						"enum": []string{"markdown", "html", "rawHtml"},
-					},
-					"default": []string{"markdown"},
-				},
-				"timeout": map[string]interface{}{
-					"type":        "integer",
-					"description": "Timeout in seconds",
-					"default":     30,
-				},
-			},
-			"required": []string{"url"},
-		},
-		s.handleScrape,
-	)
+	mcp.AddTool(s.server, &mcp.Tool{
+		Name:        "scrape",
+		Description: "Scrape a single web page and extract content",
+	}, s.handleScrape)
 
 	// Crawl tool
-	s.server.AddTool(
-		"crawl",
-		"Start a crawl job for multiple pages",
-		map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"url": map[string]interface{}{
-					"type":        "string",
-					"description": "Starting URL for crawl",
-				},
-				"maxDepth": map[string]interface{}{
-					"type":        "integer",
-					"description": "Maximum crawl depth",
-					"default":     2,
-				},
-				"maxPages": map[string]interface{}{
-					"type":        "integer",
-					"description": "Maximum pages to crawl",
-					"default":     10,
-				},
-			},
-			"required": []string{"url"},
-		},
-		s.handleCrawl,
-	)
+	mcp.AddTool(s.server, &mcp.Tool{
+		Name:        "crawl",
+		Description: "Start a crawl job for multiple pages",
+	}, s.handleCrawl)
 
-	// Stats tool
-	s.server.AddTool(
-		"stats",
-		"Get crawl queue statistics",
-		map[string]interface{}{
-			"type":       "object",
-			"properties": map[string]interface{}{},
-		},
-		s.handleStats,
-	)
+	// Stats tool  
+	mcp.AddTool(s.server, &mcp.Tool{
+		Name:        "stats",
+		Description: "Get crawl queue statistics",
+	}, s.handleStats)
 }
 
 // handleScrape handles the scrape tool
-func (s *MCPServer) handleScrape(ctx context.Context, params map[string]interface{}) (*types.ToolResult, error) {
-	url, ok := params["url"].(string)
-	if !ok {
-		return nil, fmt.Errorf("url parameter is required")
-	}
+func (s *MCPServer) handleScrape(ctx context.Context, ss *mcp.ServerSession, params *mcp.CallToolParamsFor[ScrapeArgs]) (*mcp.CallToolResultFor[struct{}], error) {
+	args := params.Arguments
 
 	// Convert parameters to CrawlRequest
 	req := &crawler.CrawlRequest{
-		URL: url,
+		URL:             args.URL,
+		OnlyMainContent: args.OnlyMainContent,
+		Formats:         args.Formats,
+		Timeout:         args.Timeout,
 	}
 
-	if onlyMain, ok := params["onlyMainContent"].(bool); ok {
-		req.OnlyMainContent = onlyMain
-	}
-
-	if formats, ok := params["formats"].([]interface{}); ok {
-		req.Formats = make([]string, len(formats))
-		for i, f := range formats {
-			req.Formats[i] = f.(string)
-		}
-	} else {
+	// Set defaults
+	if len(req.Formats) == 0 {
 		req.Formats = []string{"markdown"}
 	}
-
-	if timeout, ok := params["timeout"].(float64); ok {
-		req.Timeout = int(timeout)
+	if req.Timeout == 0 {
+		req.Timeout = 30
 	}
 
 	// Perform the scrape
 	result, err := crawler.CrawlURL(req, s.cfg)
 	if err != nil {
-		return &types.ToolResult{
-			Content: []interface{}{
-				map[string]interface{}{
-					"type": "text",
-					"text": fmt.Sprintf("Error scraping URL: %v", err),
+		return &mcp.CallToolResultFor[struct{}]{
+			Content: []mcp.Content{
+				&mcp.TextContent{
+					Text: fmt.Sprintf("Error scraping URL: %v", err),
 				},
 			},
 			IsError: true,
@@ -182,38 +134,35 @@ func (s *MCPServer) handleScrape(ctx context.Context, params map[string]interfac
 		return nil, err
 	}
 
-	return &types.ToolResult{
-		Content: []interface{}{
-			map[string]interface{}{
-				"type": "text",
-				"text": string(resultJSON),
+	return &mcp.CallToolResultFor[struct{}]{
+		Content: []mcp.Content{
+			&mcp.TextContent{
+				Text: string(resultJSON),
 			},
 		},
 	}, nil
 }
 
 // handleCrawl handles the crawl tool
-func (s *MCPServer) handleCrawl(ctx context.Context, params map[string]interface{}) (*types.ToolResult, error) {
-	url, ok := params["url"].(string)
-	if !ok {
-		return nil, fmt.Errorf("url parameter is required")
+func (s *MCPServer) handleCrawl(ctx context.Context, ss *mcp.ServerSession, params *mcp.CallToolParamsFor[CrawlArgs]) (*mcp.CallToolResultFor[struct{}], error) {
+	args := params.Arguments
+
+	// Set defaults
+	maxDepth := args.MaxDepth
+	if maxDepth == 0 {
+		maxDepth = 2
 	}
 
-	maxDepth := 2
-	if depth, ok := params["maxDepth"].(float64); ok {
-		maxDepth = int(depth)
-	}
-
-	maxPages := 10
-	if pages, ok := params["maxPages"].(float64); ok {
-		maxPages = int(pages)
+	maxPages := args.MaxPages
+	if maxPages == 0 {
+		maxPages = 10
 	}
 
 	// Create a new crawl job
 	jobID := fmt.Sprintf("crawl_%d", time.Now().Unix())
 	job := &CrawlJob{
 		ID:        jobID,
-		URL:       url,
+		URL:       args.URL,
 		Status:    "pending",
 		Progress:  0,
 		Total:     maxPages,
@@ -224,11 +173,10 @@ func (s *MCPServer) handleCrawl(ctx context.Context, params map[string]interface
 	// Start the crawl in a goroutine
 	go s.performCrawl(job, maxDepth, maxPages)
 
-	return &types.ToolResult{
-		Content: []interface{}{
-			map[string]interface{}{
-				"type": "text",
-				"text": fmt.Sprintf("Crawl job started with ID: %s", jobID),
+	return &mcp.CallToolResultFor[struct{}]{
+		Content: []mcp.Content{
+			&mcp.TextContent{
+				Text: fmt.Sprintf("Crawl job started with ID: %s", jobID),
 			},
 		},
 	}, nil
@@ -253,8 +201,11 @@ func (s *MCPServer) performCrawl(job *CrawlJob, maxDepth, maxPages int) {
 	job.EndTime = &now
 }
 
+// StatsArgs represents empty arguments for the stats tool
+type StatsArgs struct{}
+
 // handleStats handles the stats tool
-func (s *MCPServer) handleStats(ctx context.Context, params map[string]interface{}) (*types.ToolResult, error) {
+func (s *MCPServer) handleStats(ctx context.Context, ss *mcp.ServerSession, params *mcp.CallToolParamsFor[StatsArgs]) (*mcp.CallToolResultFor[struct{}], error) {
 	stats := map[string]interface{}{
 		"activeJobs":    0,
 		"pendingJobs":   0,
@@ -302,22 +253,21 @@ func (s *MCPServer) handleStats(ctx context.Context, params map[string]interface
 		return nil, err
 	}
 
-	return &types.ToolResult{
-		Content: []interface{}{
-			map[string]interface{}{
-				"type": "text",
-				"text": string(statsJSON),
+	return &mcp.CallToolResultFor[struct{}]{
+		Content: []mcp.Content{
+			&mcp.TextContent{
+				Text: string(statsJSON),
 			},
 		},
 	}, nil
 }
 
-// Start starts the MCP server
-func (s *MCPServer) Start() error {
-	return s.server.Start()
+// Start starts the MCP server using the provided transport
+func (s *MCPServer) Start(ctx context.Context, transport mcp.Transport) error {
+	return s.server.Run(ctx, transport)
 }
 
 // GetServer returns the underlying MCP server
-func (s *MCPServer) GetServer() *server.MCPServer {
+func (s *MCPServer) GetServer() *mcp.Server {
 	return s.server
 }
