@@ -14,6 +14,7 @@ type Config struct {
 	Crawler  CrawlerConfig
 	Retention RetentionConfig
 	RateLimit RateLimitConfig
+	SSE      SSEConfig
 }
 
 type ServerConfig struct {
@@ -49,6 +50,10 @@ type RateLimitConfig struct {
 	Window   time.Duration
 }
 
+type SSEConfig struct {
+	Enable bool
+}
+
 // Load reads configuration from viper
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -78,6 +83,9 @@ func Load() (*Config, error) {
 		RateLimit: RateLimitConfig{
 			Requests: viper.GetInt("RATE_LIMIT_REQUESTS"),
 			Window:   viper.GetDuration("RATE_LIMIT_WINDOW"),
+		},
+		SSE: SSEConfig{
+			Enable: viper.GetBool("ENABLE_SSE"),
 		},
 	}
 

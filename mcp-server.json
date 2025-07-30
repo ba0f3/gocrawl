@@ -1,0 +1,100 @@
+{
+  "name": "gocrawl-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for GoCrawl web scraping service",
+  "endpoints": {
+    "sse": {
+      "url": "/v1/sse",
+      "method": "GET",
+      "description": "Server-Sent Events endpoint for real-time updates",
+      "auth": "required"
+    },
+    "scrape": {
+      "url": "/v1/mcp/scrape",
+      "method": "POST",
+      "description": "Scrape a single web page",
+      "auth": "required",
+      "parameters": {
+        "url": {
+          "type": "string",
+          "required": true,
+          "description": "URL to scrape"
+        },
+        "onlyMainContent": {
+          "type": "boolean",
+          "required": false,
+          "description": "Extract only main content"
+        },
+        "formats": {
+          "type": "array",
+          "required": false,
+          "description": "Output formats (markdown, html, rawHtml)"
+        },
+        "timeout": {
+          "type": "integer",
+          "required": false,
+          "description": "Timeout in seconds"
+        }
+      }
+    },
+    "crawl": {
+      "url": "/v1/mcp/crawl",
+      "method": "POST",
+      "description": "Start a crawl job for multiple pages",
+      "auth": "required",
+      "parameters": {
+        "url": {
+          "type": "string",
+          "required": true,
+          "description": "Starting URL for crawl"
+        },
+        "maxDepth": {
+          "type": "integer",
+          "required": false,
+          "description": "Maximum crawl depth"
+        },
+        "maxPages": {
+          "type": "integer",
+          "required": false,
+          "description": "Maximum pages to crawl"
+        }
+      }
+    },
+    "stats": {
+      "url": "/v1/mcp/stats",
+      "method": "GET",
+      "description": "Get crawl queue statistics",
+      "auth": "required"
+    }
+  },
+  "authentication": {
+    "type": "bearer",
+    "description": "Use Bearer token authentication with API key"
+  },
+  "sse_events": [
+    {
+      "type": "connected",
+      "description": "Initial connection confirmation"
+    },
+    {
+      "type": "heartbeat",
+      "description": "Periodic heartbeat with timestamp"
+    },
+    {
+      "type": "crawl_started",
+      "description": "Notification when a crawl job starts"
+    },
+    {
+      "type": "crawl_progress",
+      "description": "Progress updates for crawl jobs"
+    },
+    {
+      "type": "crawl_completed",
+      "description": "Notification when a crawl job completes"
+    },
+    {
+      "type": "error",
+      "description": "Error notifications"
+    }
+  ]
+}

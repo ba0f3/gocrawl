@@ -70,6 +70,22 @@ func main() {
 	apiRouter.Use(api.LoggingMiddleware)
 	apiRouter.Use(api.CORSMiddleware)
 
+	// SSE route (if enabled)
+	if cfg.SSE.Enable {
+		sseRouter := router.PathPrefix("/v1/sse").Subrouter()
+		sseRouter.Use(api.LoggingMiddleware)
+		sseRouter.Use(api.AuthMiddleware(database, cfg.Security.DisableAuth))
+		sseRouter.HandleFunc("", handler.SSE).Methods("GET")
+		log.Println("SSE endpoint enabled at /v1/sse")
+	}
+
+	// MCP tool routes
+	mcpRouter := apiRouter.PathPrefix("/mcp").Subrouter()
+	mcpRouter.Use(api.AuthMiddleware(database, cfg.Security.DisableAuth))
+	mcpRouter.HandleFunc("/scrape", handler.MCPScrape).Methods("POST")
+	mcpRouter.HandleFunc("/crawl", handler.MCPCrawl).Methods("POST")
+	mcpRouter.HandleFunc("/stats", handler.MCPStats).Methods("GET")
+
 	// Apply authentication middleware only to protected routes if auth is enabled
 	if !cfg.Security.DisableAuth {
 		protectedRouter := apiRouter.PathPrefix("").Subrouter()

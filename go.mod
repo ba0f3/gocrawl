@@ -28,6 +28,7 @@ require (
 	github.com/kennygrant/sanitize v1.2.4 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/modelcontextprotocol/go-sdk v0.2.0 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/nlnwa/whatwg-url v0.6.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
