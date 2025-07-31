@@ -3,12 +3,14 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
 	"gocrawl/internal/config"
 	"gocrawl/internal/crawler"
 	"gocrawl/internal/db"
+	"gocrawl/internal/mcp"
 	"gocrawl/internal/user"
 
 	"github.com/google/uuid"
@@ -20,13 +22,20 @@ type Handler struct {
 	DB           *db.Database
 	Cfg          *config.Config
 	crawlManager *CrawlManager
+	SSEManager   *mcp.SSEManager
+	MCPServer    *mcp.MCPServer
 }
 
 func NewHandler(database *db.Database, cfg *config.Config) *Handler {
+	sseManager := mcp.NewSSEManager()
+	mcpServer, _ := mcp.NewMCPServer(database, cfg)
+
 	return &Handler{
 		DB:           database,
 		Cfg:          cfg,
 		crawlManager: NewCrawlManager(database, cfg),
+		SSEManager:   sseManager,
+		MCPServer:    mcpServer,
 	}
 }
 
@@ -267,6 +276,81 @@ func (h *Handler) GetCrawlStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // SSE handles Server-Sent Events connections
+func (h *Handler) SSEScrape(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	sseClient := &mcp.SSEClient{
+		ID:     "scrape_client",
+		Events: make(chan mcp.SSEEvent, 10),
+		Done:   make(chan bool),
+	}
+
+	h.SSEManager.AddClient(sseClient)
+	defer h.SSEManager.RemoveClient(sseClient.ID)
+
+	go func() {
+		var req crawler.CrawlRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Printf("Error decoding request: %v", err)
+			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": err.Error()}}
+			return
+		}
+
+		// Set defaults
+		if len(req.Formats) == 0 {
+			req.Formats = []string{"markdown"}
+		}
+		if req.Timeout == 0 {
+			req.Timeout = 30
+		}
+
+		// Perform the scrape
+		result, err := crawler.CrawlURL(&req, h.Cfg)
+		if err != nil {
+			log.Printf("Error scraping URL: %v", err)
+			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": err.Error()}}
+			return
+		}
+
+		// Stream the result
+		event := mcp.SSEEvent{
+			Type: "scrape_result", 
+			Data: map[string]interface{}{
+				"url": req.URL,
+				"title": result.Metadata["title"],
+				"markdown": result.Markdown,
+				"html": result.HTML,
+				"metadata": result.Metadata,
+			},
+			Timestamp: time.Now(),
+		}
+		sseClient.Events <- event
+		sseClient.Done <- true
+	}()
+
+	for {
+		select {
+		case event := <-sseClient.Events:
+			if message, err := mcp.FormatSSEMessage(event); err == nil {
+				fmt.Fprint(w, message)
+				flusher.Flush()
+			}
+		case <-sseClient.Done:
+			return
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
 func (h *Handler) SSE(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -299,6 +383,12 @@ func (h *Handler) SSE(w http.ResponseWriter, r *http.Request) {
 
 // MCPScrape handles MCP scraping requests
 func (h *Handler) MCPScrape(w http.ResponseWriter, r *http.Request) {
+	sendSSE := r.Header.Get("Accept") == "text/event-stream"
+
+	if sendSSE {
+		h.SSEScrape(w, r)
+		return
+	}
 	var req crawler.CrawlRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeResponse(w, http.StatusBadRequest, nil, err)

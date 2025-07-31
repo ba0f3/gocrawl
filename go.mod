@@ -7,6 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/jaytaylor/html2text v0.0.0-20230321000545-74c2419ad056
+	github.com/modelcontextprotocol/go-sdk v0.2.0
 	github.com/spf13/viper v1.20.1
 	go.mongodb.org/mongo-driver v1.17.4
 	golang.org/x/crypto v0.40.0
@@ -28,7 +29,6 @@ require (
 	github.com/kennygrant/sanitize v1.2.4 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
-	github.com/modelcontextprotocol/go-sdk v0.2.0 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/nlnwa/whatwg-url v0.6.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
