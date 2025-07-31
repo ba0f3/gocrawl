@@ -140,11 +140,17 @@ type CrawlResponse struct {
 }
 
 func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
-	// Get user from context (set by auth middleware)
-	userID, ok := r.Context().Value("userID").(string)
-	if !ok {
-		writeResponse(w, http.StatusUnauthorized, nil, fmt.Errorf("unauthorized"))
-		return
+// Get user from context (set by auth middleware)
+	var userObjID primitive.ObjectID
+	if user, ok := r.Context().Value("user").(*db.User); ok && user != nil {
+		userObjID = user.ID
+	} else {
+		if !h.Cfg.Security.DisableAuth {
+			writeResponse(w, http.StatusUnauthorized, nil, fmt.Errorf("unauthorized"))
+			return
+		}
+		// Use default user ID when auth is disabled
+		userObjID = primitive.NewObjectID()
 	}
 
 	var req CrawlRequestBody
@@ -162,13 +168,6 @@ func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.MaxConcurrency == 0 {
 		req.MaxConcurrency = 10
-	}
-
-	// Parse userID to ObjectID
-	userObjID, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
-		writeResponse(w, http.StatusBadRequest, nil, fmt.Errorf("invalid user ID"))
-		return
 	}
 
 	// Create a new crawl job

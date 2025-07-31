@@ -131,6 +131,10 @@ func (d *Database) InitIndexes() error {
 
 // Close closes the MongoDB connection
 func (d *Database) Close() error {
+	if d == nil || d.Client == nil {
+		// Nothing to close when database is nil
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return d.Client.Disconnect(ctx)
@@ -171,6 +175,10 @@ func (d *Database) cleanupOldData(retentionDays int) {
 
 // CreateUser creates a new user
 func (d *Database) CreateUser(user *User) error {
+	if d == nil || d.DB == nil {
+		// When database is disabled, return error
+		return fmt.Errorf("database is not available")
+	}
 	user.CreatedAt = time.Now()
 	_, err := d.DB.Collection("users").InsertOne(context.Background(), user)
 	return err
@@ -178,6 +186,10 @@ func (d *Database) CreateUser(user *User) error {
 
 // GetUserByUsername retrieves a user by username
 func (d *Database) GetUserByUsername(username string) (*User, error) {
+	if d == nil || d.DB == nil {
+		// When database is disabled, return error
+		return nil, fmt.Errorf("database is not available")
+	}
 	var user User
 	err := d.DB.Collection("users").FindOne(context.Background(), bson.M{
 		"username": username,
@@ -190,6 +202,10 @@ func (d *Database) GetUserByUsername(username string) (*User, error) {
 
 // GetUserByAPIKey retrieves a user by API key
 func (d *Database) GetUserByAPIKey(apiKey string) (*User, error) {
+	if d == nil || d.DB == nil {
+		// When database is disabled, return error
+		return nil, fmt.Errorf("database is not available")
+	}
 	var user User
 	err := d.DB.Collection("users").FindOne(context.Background(), bson.M{
 		"apiKey": apiKey,
@@ -204,6 +220,10 @@ func (d *Database) GetUserByAPIKey(apiKey string) (*User, error) {
 
 // CreateCrawlJob creates a new crawl job
 func (d *Database) CreateCrawlJob(job *CrawlJob) error {
+	if d == nil || d.DB == nil {
+		// When database is disabled, just return success
+		return nil
+	}
 	job.CreatedAt = time.Now()
 	_, err := d.DB.Collection("crawl_jobs").InsertOne(context.Background(), job)
 	return err
@@ -211,6 +231,14 @@ func (d *Database) CreateCrawlJob(job *CrawlJob) error {
 
 // GetCrawlJob retrieves a crawl job by ID
 func (d *Database) GetCrawlJob(id string) (*CrawlJob, error) {
+	if d == nil || d.DB == nil {
+		// Return a dummy job when database is disabled
+		return &CrawlJob{
+			ID:        id,
+			Status:    "unknown",
+			CreatedAt: time.Now(),
+		}, nil
+	}
 	var job CrawlJob
 	err := d.DB.Collection("crawl_jobs").FindOne(context.Background(), bson.M{
 		"_id": id,
@@ -223,6 +251,10 @@ func (d *Database) GetCrawlJob(id string) (*CrawlJob, error) {
 
 // UpdateCrawlJob updates a crawl job
 func (d *Database) UpdateCrawlJob(job *CrawlJob) error {
+	if d == nil || d.DB == nil {
+		// When database is disabled, just return success
+		return nil
+	}
 	_, err := d.DB.Collection("crawl_jobs").UpdateOne(
 		context.Background(),
 		bson.M{"_id": job.ID},
@@ -235,6 +267,10 @@ func (d *Database) UpdateCrawlJob(job *CrawlJob) error {
 
 // CreateCrawlResult creates a new crawl result
 func (d *Database) CreateCrawlResult(result *CrawlResult) error {
+	if d == nil || d.DB == nil {
+		// When database is disabled, just return success
+		return nil
+	}
 	result.CreatedAt = time.Now()
 	_, err := d.DB.Collection("crawl_results").InsertOne(context.Background(), result)
 	return err
@@ -242,6 +278,10 @@ func (d *Database) CreateCrawlResult(result *CrawlResult) error {
 
 // GetCrawlResults retrieves crawl results by job ID
 func (d *Database) GetCrawlResults(jobID string) ([]*CrawlResult, error) {
+	if d == nil || d.DB == nil {
+		// Return empty results when database is disabled
+		return []*CrawlResult{}, nil
+	}
 	cursor, err := d.DB.Collection("crawl_results").Find(context.Background(), bson.M{
 		"jobId": jobID,
 	})

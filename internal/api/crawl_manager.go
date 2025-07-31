@@ -2,11 +2,16 @@ package api
 
 import (
 	"log"
+	"net/url"
+	"strings"
 	"sync"
+	"time"
 
 	"gocrawl/internal/config"
 	"gocrawl/internal/crawler"
 	"gocrawl/internal/db"
+
+	"github.com/gocolly/colly/v2"
 )
 
 // CrawlManager manages crawl jobs
@@ -34,29 +39,11 @@ func (cm *CrawlManager) StartCrawl(jobID string, req *CrawlRequestBody) {
 	// Update status to running
 	cm.updateCrawlStatus(jobID, "crawling", 0)
 
-	// For now, just crawl the single URL provided
-	// TODO: Implement multi-page crawling with depth, link following, etc.
-	crawlReq := req.ScrapeOptions
-	if crawlReq == nil {
-		crawlReq = &crawler.CrawlRequest{
-			URL:             req.URL,
-			OnlyMainContent: true,
-			Formats:         []string{"markdown", "html", "rawHtml"},
-			Timeout:         30,
-		}
-	} else if crawlReq.URL == "" {
-		crawlReq.URL = req.URL
-	}
+	// Perform multi-page crawl
+	results := cm.performMultiPageCrawl(req, jobID)
 
-	// Perform crawl for the main URL
-	result, err := crawler.CrawlURL(crawlReq, cm.cfg)
-	if err != nil {
-		log.Printf("Error performing crawl: %v", err)
-		cm.updateCrawlStatus(jobID, "failed", 0)
-		return
-	}
-
-	results := []*crawler.CrawlResult{result}
+	// Update total count
+	cm.updateCrawlTotal(jobID, len(results))
 
 	// Save results
 	for _, result := range results {
@@ -93,5 +80,144 @@ func (cm *CrawlManager) updateCrawlStatus(jobID string, status string, completed
 	if err := cm.db.UpdateCrawlJob(job); err != nil {
 		log.Printf("Error updating crawl job status: %v", err)
 	}
+}
+
+// updateCrawlTotal updates the total count for a crawl job
+func (cm *CrawlManager) updateCrawlTotal(jobID string, total int) {
+	job, err := cm.db.GetCrawlJob(jobID)
+	if err != nil {
+		log.Printf("Error retrieving crawl job for total update: %v", err)
+		return
+	}
+
+	job.Total = total
+	if err := cm.db.UpdateCrawlJob(job); err != nil {
+		log.Printf("Error updating crawl job total: %v", err)
+	}
+}
+
+// performMultiPageCrawl performs a multi-page crawl based on the request
+func (cm *CrawlManager) performMultiPageCrawl(req *CrawlRequestBody, jobID string) []*crawler.CrawlResult {
+	results := make([]*crawler.CrawlResult, 0)
+	visited := make(map[string]bool)
+	completedCount := 0
+
+	// Parse base URL
+	baseURL, err := url.Parse(req.URL)
+	if err != nil {
+		log.Printf("Error parsing base URL: %v", err)
+		return results
+	}
+
+	// Create colly collector
+	c := colly.NewCollector(
+		colly.MaxDepth(req.MaxDepth),
+		colly.Async(true),
+	)
+
+	// Set concurrency
+	c.Limit(&colly.LimitRule{
+		DomainGlob:  "*",
+		Parallelism: req.MaxConcurrency,
+		Delay:       time.Duration(req.Delay) * time.Millisecond,
+	})
+
+	// Configure based on request options
+	if !req.AllowExternalLinks {
+		c.AllowedDomains = append(c.AllowedDomains, baseURL.Host)
+	}
+
+	// Handle found links
+	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
+		link := e.Attr("href")
+		absURL := e.Request.AbsoluteURL(link)
+		
+		// Apply filters
+		if cm.shouldCrawlURL(absURL, baseURL, req) && !visited[absURL] {
+			visited[absURL] = true
+			if len(visited) <= req.Limit {
+				e.Request.Visit(absURL)
+			}
+		}
+	})
+
+	// Process each page
+	c.OnScraped(func(r *colly.Response) {
+		if completedCount >= req.Limit {
+			return
+		}
+
+		// Create crawl request for this page
+		scrapeReq := req.ScrapeOptions
+		if scrapeReq == nil {
+			scrapeReq = &crawler.CrawlRequest{
+				OnlyMainContent: true,
+				Formats:         []string{"markdown", "html", "rawHtml"},
+			}
+		}
+		scrapeReq.URL = r.Request.URL.String()
+
+		// Crawl the page
+		result, err := crawler.CrawlURL(scrapeReq, cm.cfg)
+		if err != nil {
+			log.Printf("Error crawling page %s: %v", r.Request.URL, err)
+			return
+		}
+
+		results = append(results, result)
+		completedCount++
+
+		// Update progress periodically
+		if completedCount%10 == 0 {
+			cm.updateCrawlStatus(jobID, "crawling", completedCount)
+		}
+	})
+
+	// Start crawling
+	c.Visit(req.URL)
+	c.Wait()
+
+	return results
+}
+
+// shouldCrawlURL determines if a URL should be crawled based on filters
+func (cm *CrawlManager) shouldCrawlURL(absURL string, baseURL *url.URL, req *CrawlRequestBody) bool {
+	parsedURL, err := url.Parse(absURL)
+	if err != nil {
+		return false
+	}
+
+	// Check if external link
+	if !req.AllowExternalLinks && parsedURL.Host != baseURL.Host {
+		return false
+	}
+
+	// Check subdomain
+	if !req.AllowSubdomains && parsedURL.Host != baseURL.Host {
+		return false
+	}
+
+	// Check include paths
+	if len(req.IncludePaths) > 0 {
+		included := false
+		for _, path := range req.IncludePaths {
+			if strings.Contains(parsedURL.Path, path) {
+				included = true
+				break
+			}
+		}
+		if !included {
+			return false
+		}
+	}
+
+	// Check exclude paths
+	for _, path := range req.ExcludePaths {
+		if strings.Contains(parsedURL.Path, path) {
+			return false
+		}
+	}
+
+	return true
 }
 
