@@ -1,12 +1,12 @@
 package extractor
 
 import (
-	"github.com/jaytaylor/html2text"
+	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 )
 
 // ToMarkdown converts HTML content to Markdown
 func ToMarkdown(htmlContent string) (string, error) {
-	markdown, err := html2text.FromString(htmlContent)
+	markdown, err := htmltomarkdown.ConvertString(htmlContent)
 	if err != nil {
 		return "", err
 	}

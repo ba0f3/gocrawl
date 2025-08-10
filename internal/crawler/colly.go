@@ -93,6 +93,7 @@ func CrawlURL(req *CrawlRequest, cfg *config.Config) (*CrawlResult, error) {
 
 		// Convert to markdown if requested
 		if contains(req.Formats, "markdown") {
+			// Extract domain from URL for relative link conversion
 			markdown, err := extractor.ToMarkdown(contentHTML)
 			if err == nil {
 				result.Markdown = markdown
