@@ -11,6 +11,7 @@ import (
 	"gocrawl/internal/db"
 	"gocrawl/internal/user"
 
+	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
 )
 
@@ -114,5 +115,100 @@ func RateLimitMiddleware(cfg config.RateLimitConfig) func(http.Handler) http.Han
 			}
 			next.ServeHTTP(w, req)
 		})
+	}
+}
+
+// GinLoggingMiddleware logs requests (uses ClientIP for compatibility with reverse proxies).
+func GinLoggingMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		log.Printf("%s %s %s", c.Request.Method, c.Request.URL.Path, c.ClientIP())
+		c.Next()
+	}
+}
+
+// GinCORSMiddleware adds CORS headers and handles OPTIONS.
+func GinCORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h := c.Writer.Header()
+		h.Set("Access-Control-Allow-Origin", "*")
+		h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusOK)
+			return
+		}
+		c.Next()
+	}
+}
+
+// GinAuthMiddleware validates API keys and attaches the user to the request context (same key as mux: "user").
+func GinAuthMiddleware(database db.Store, enableAuth bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !enableAuth {
+			c.Next()
+			return
+		}
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.String(http.StatusUnauthorized, "Authorization header required")
+			c.Abort()
+			return
+		}
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.String(http.StatusUnauthorized, "Invalid authorization header format")
+			c.Abort()
+			return
+		}
+		u, err := user.GetUserByAPIKey(database, parts[1])
+		if err != nil {
+			c.String(http.StatusUnauthorized, "Invalid API key")
+			c.Abort()
+			return
+		}
+		ctx := context.WithValue(c.Request.Context(), "user", u)
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	}
+}
+
+// GinRateLimitMiddleware limits requests per client (API key when present, else client IP).
+func GinRateLimitMiddleware(cfg config.RateLimitConfig) gin.HandlerFunc {
+	var mu sync.Mutex
+	limiters := make(map[string]*rate.Limiter)
+	var r rate.Limit
+	if cfg.Window > 0 && cfg.Requests > 0 {
+		r = rate.Limit(float64(cfg.Requests) / cfg.Window.Seconds())
+	} else {
+		r = rate.Inf
+	}
+	if r <= 0 {
+		r = rate.Inf
+	}
+	burst := cfg.Requests
+	if burst < 1 {
+		burst = 1
+	}
+	return func(c *gin.Context) {
+		key := "ip:" + c.ClientIP()
+		if ah := c.GetHeader("Authorization"); ah != "" {
+			parts := strings.SplitN(ah, " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && parts[1] != "" {
+				key = "key:" + parts[1]
+			}
+		}
+		mu.Lock()
+		lim, ok := limiters[key]
+		if !ok {
+			lim = rate.NewLimiter(r, burst)
+			limiters[key] = lim
+		}
+		mu.Unlock()
+		if !lim.Allow() {
+			c.String(http.StatusTooManyRequests, "rate limit exceeded")
+			c.Abort()
+			return
+		}
+		c.Next()
 	}
 }

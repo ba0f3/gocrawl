@@ -13,8 +13,8 @@ import (
 	"gocrawl/internal/mcp"
 	"gocrawl/internal/user"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/gorilla/mux"
 )
 
 type Handler struct {
@@ -49,10 +49,7 @@ type ApiResponse struct {
 	Error   string      `json:"error,omitempty"`
 }
 
-func writeResponse(w http.ResponseWriter, statusCode int, data interface{}, err error) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-
+func writeJSON(c *gin.Context, statusCode int, data interface{}, err error) {
 	resp := ApiResponse{}
 	if err != nil {
 		resp.Success = false
@@ -61,68 +58,67 @@ func writeResponse(w http.ResponseWriter, statusCode int, data interface{}, err 
 		resp.Success = true
 		resp.Data = data
 	}
-
-	json.NewEncoder(w).Encode(resp)
+	c.JSON(statusCode, resp)
 }
 
-func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Register(c *gin.Context) {
 	var creds struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-		writeResponse(w, http.StatusBadRequest, nil, err)
+	if err := c.ShouldBindJSON(&creds); err != nil {
+		writeJSON(c, http.StatusBadRequest, nil, err)
 		return
 	}
 
 	u, err := user.Register(h.DB, creds.Username, creds.Password)
 	if err != nil {
-		writeResponse(w, http.StatusInternalServerError, nil, err)
+		writeJSON(c, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	writeResponse(w, http.StatusCreated, u, nil)
+	writeJSON(c, http.StatusCreated, u, nil)
 }
 
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Login(c *gin.Context) {
 	var creds struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-		writeResponse(w, http.StatusBadRequest, nil, err)
+	if err := c.ShouldBindJSON(&creds); err != nil {
+		writeJSON(c, http.StatusBadRequest, nil, err)
 		return
 	}
 
 	u, err := user.Login(h.DB, creds.Username, creds.Password)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, nil, err)
+		writeJSON(c, http.StatusUnauthorized, nil, err)
 		return
 	}
 
-	writeResponse(w, http.StatusOK, u, nil)
+	writeJSON(c, http.StatusOK, u, nil)
 }
 
-func (h *Handler) GenerateAPIKey(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GenerateAPIKey(c *gin.Context) {
 	// This should be protected and only accessible to logged-in users
 	// For simplicity, we are not implementing full session management here
-	writeResponse(w, http.StatusNotImplemented, nil, fmt.Errorf("not implemented"))
+	writeJSON(c, http.StatusNotImplemented, nil, fmt.Errorf("not implemented"))
 }
 
-func (h *Handler) Scrape(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Scrape(c *gin.Context) {
 	var req crawler.ScrapeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, nil, err)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeJSON(c, http.StatusBadRequest, nil, err)
 		return
 	}
 
 	result, err := crawler.ScrapeURL(&req, h.Cfg)
 	if err != nil {
-		writeResponse(w, http.StatusInternalServerError, nil, err)
+		writeJSON(c, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	writeResponse(w, http.StatusOK, result, nil)
+	writeJSON(c, http.StatusOK, result, nil)
 }
 
 // CrawlRequest represents the request body for /api/v1/crawl
@@ -156,21 +152,21 @@ type CrawlResponse struct {
 	URL     string `json:"url"`
 }
 
-func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Crawl(c *gin.Context) {
 	var userID string
-	if user, ok := r.Context().Value("user").(*db.User); ok && user != nil {
+	if user, ok := c.Request.Context().Value("user").(*db.User); ok && user != nil {
 		userID = user.ID
 	} else {
 		if h.Cfg.Security.EnableAuth {
-			writeResponse(w, http.StatusUnauthorized, nil, fmt.Errorf("unauthorized"))
+			writeJSON(c, http.StatusUnauthorized, nil, fmt.Errorf("unauthorized"))
 			return
 		}
 		userID = uuid.New().String()
 	}
 
 	var req CrawlRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, nil, err)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeJSON(c, http.StatusBadRequest, nil, err)
 		return
 	}
 
@@ -186,7 +182,7 @@ func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
 
 	payload, err := json.Marshal(&req)
 	if err != nil {
-		writeResponse(w, http.StatusInternalServerError, nil, err)
+		writeJSON(c, http.StatusInternalServerError, nil, err)
 		return
 	}
 
@@ -205,20 +201,15 @@ func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.DB.CreateCrawlJob(crawlJob); err != nil {
-		writeResponse(w, http.StatusInternalServerError, nil, err)
+		writeJSON(c, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	// Return job ID immediately
-	response := CrawlResponse{
+	c.JSON(http.StatusOK, CrawlResponse{
 		Success: true,
 		ID:      jobID,
 		URL:     req.URL,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	})
 }
 
 // CrawlStatusResponse represents the response for /api/v1/crawl/{id}
@@ -232,31 +223,25 @@ type CrawlStatusResponse struct {
 	Data        []crawler.ScrapeResult `json:"data,omitempty"`
 }
 
-func (h *Handler) GetCrawlStatus(w http.ResponseWriter, r *http.Request) {
-	// Get job ID from URL parameters
-	vars := mux.Vars(r)
-	jobID := vars["id"]
-
+func (h *Handler) GetCrawlStatus(c *gin.Context) {
+	jobID := c.Param("id")
 	if jobID == "" {
-		writeResponse(w, http.StatusBadRequest, nil, fmt.Errorf("job ID is required"))
+		writeJSON(c, http.StatusBadRequest, nil, fmt.Errorf("job ID is required"))
 		return
 	}
 
-	// Get crawl job from database
 	job, err := h.DB.GetCrawlJob(jobID)
 	if err != nil {
-		writeResponse(w, http.StatusNotFound, nil, fmt.Errorf("job not found"))
+		writeJSON(c, http.StatusNotFound, nil, fmt.Errorf("job not found"))
 		return
 	}
 
-	// Get crawl results
 	results, err := h.DB.GetCrawlResults(jobID)
 	if err != nil {
-		writeResponse(w, http.StatusInternalServerError, nil, err)
+		writeJSON(c, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	// Convert database results to API format
 	apiResults := make([]crawler.ScrapeResult, len(results))
 	for i, result := range results {
 		apiResults[i] = crawler.ScrapeResult{
@@ -268,25 +253,22 @@ func (h *Handler) GetCrawlStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	response := CrawlStatusResponse{
+	c.JSON(http.StatusOK, CrawlStatusResponse{
 		Status:      job.Status,
 		Total:       job.Total,
 		Completed:   job.Completed,
 		CreditsUsed: job.CreditsUsed,
 		ExpiresAt:   job.ExpiresAt.Format(time.RFC3339),
 		Data:        apiResults,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	})
 }
 
-// SSE handles Server-Sent Events connections
-func (h *Handler) SSEScrape(w http.ResponseWriter, r *http.Request) {
+// SSEScrape streams scrape results over SSE (used by MCP when Accept: text/event-stream).
+func (h *Handler) SSEScrape(c *gin.Context) {
+	w := c.Writer
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+		c.String(http.StatusInternalServerError, "Streaming unsupported!")
 		return
 	}
 
@@ -303,35 +285,33 @@ func (h *Handler) SSEScrape(w http.ResponseWriter, r *http.Request) {
 	h.SSEManager.AddClient(sseClient)
 	defer h.SSEManager.RemoveClient(sseClient.ID)
 
+	req := c.Request
 	go func() {
-		var req crawler.ScrapeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var scrapeReq crawler.ScrapeRequest
+		if err := json.NewDecoder(req.Body).Decode(&scrapeReq); err != nil {
 			log.Printf("Error decoding request: %v", err)
 			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": err.Error()}}
 			return
 		}
 
-		// Set defaults
-		if len(req.Formats) == 0 {
-			req.Formats = []string{"markdown"}
+		if len(scrapeReq.Formats) == 0 {
+			scrapeReq.Formats = []string{"markdown"}
 		}
-		if req.Timeout == 0 {
-			req.Timeout = 30
+		if scrapeReq.Timeout == 0 {
+			scrapeReq.Timeout = 30
 		}
 
-		// Perform the scrape
-		result, err := crawler.ScrapeURL(&req, h.Cfg)
+		result, err := crawler.ScrapeURL(&scrapeReq, h.Cfg)
 		if err != nil {
 			log.Printf("Error scraping URL: %v", err)
 			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": err.Error()}}
 			return
 		}
 
-		// Stream the result
 		event := mcp.SSEEvent{
 			Type: "scrape_result",
 			Data: map[string]interface{}{
-				"url":      req.URL,
+				"url":      scrapeReq.URL,
 				"title":    result.Metadata["title"],
 				"markdown": result.Markdown,
 				"html":     result.HTML,
@@ -352,16 +332,17 @@ func (h *Handler) SSEScrape(w http.ResponseWriter, r *http.Request) {
 			}
 		case <-sseClient.Done:
 			return
-		case <-r.Context().Done():
+		case <-req.Context().Done():
 			return
 		}
 	}
 }
 
-func (h *Handler) SSE(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) SSE(c *gin.Context) {
+	w := c.Writer
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+		c.String(http.StatusInternalServerError, "Streaming unsupported!")
 		return
 	}
 
@@ -369,7 +350,6 @@ func (h *Handler) SSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	// Send initial connection message
 	fmt.Fprintf(w, "data: {\"type\": \"connected\", \"message\": \"SSE connection established\"}\n\n")
 	flusher.Flush()
 
@@ -379,46 +359,42 @@ func (h *Handler) SSE(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-ticker.C:
-			// Send heartbeat
 			fmt.Fprintf(w, "data: {\"type\": \"heartbeat\", \"timestamp\": \"%s\"}\n\n", time.Now().Format(time.RFC3339))
 			flusher.Flush()
-		case <-r.Context().Done():
+		case <-c.Request.Context().Done():
 			return
 		}
 	}
 }
 
 // MCPScrape handles MCP scraping requests
-func (h *Handler) MCPScrape(w http.ResponseWriter, r *http.Request) {
-	sendSSE := r.Header.Get("Accept") == "text/event-stream"
-
-	if sendSSE {
-		h.SSEScrape(w, r)
+func (h *Handler) MCPScrape(c *gin.Context) {
+	if c.GetHeader("Accept") == "text/event-stream" {
+		h.SSEScrape(c)
 		return
 	}
 	var req crawler.ScrapeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, nil, err)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeJSON(c, http.StatusBadRequest, nil, err)
 		return
 	}
 
 	result, err := crawler.ScrapeURL(&req, h.Cfg)
 	if err != nil {
-		writeResponse(w, http.StatusInternalServerError, nil, err)
+		writeJSON(c, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	writeResponse(w, http.StatusOK, result, nil)
+	writeJSON(c, http.StatusOK, result, nil)
 }
 
 // MCPCrawl handles MCP crawling requests
-func (h *Handler) MCPCrawl(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement crawl job management
-	writeResponse(w, http.StatusNotImplemented, nil, fmt.Errorf("crawl job management not implemented yet"))
+func (h *Handler) MCPCrawl(c *gin.Context) {
+	writeJSON(c, http.StatusNotImplemented, nil, fmt.Errorf("crawl job management not implemented yet"))
 }
 
 // MCPStats handles MCP queue statistics requests
-func (h *Handler) MCPStats(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) MCPStats(c *gin.Context) {
 	stats := map[string]interface{}{
 		"activeJobs":    0,
 		"pendingJobs":   0,
@@ -427,6 +403,5 @@ func (h *Handler) MCPStats(w http.ResponseWriter, r *http.Request) {
 		"serverTime":    time.Now().Format(time.RFC3339),
 	}
 
-	// TODO: Implement actual statistics gathering
-	writeResponse(w, http.StatusOK, stats, nil)
+	writeJSON(c, http.StatusOK, stats, nil)
 }

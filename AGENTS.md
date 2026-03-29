@@ -5,7 +5,7 @@ This file orients automated coding agents and contributors to the **gocrawl** re
 ## Quick facts
 
 - **Language / module:** Go, module path `gocrawl` (see `go.mod`).
-- **Entrypoint:** `cmd/main.go` — loads config (Viper + `.env`), opens a `db.Store` (or in-memory jobs when auth is off), registers Gorilla mux routes, starts `http.ListenAndServe`.
+- **Entrypoint:** `cmd/main.go` — loads config (Viper + `.env`), opens a `db.Store` (or in-memory jobs when auth is off), builds the Gin router (`internal/api`), runs `http.Server` with tunable timeouts and graceful shutdown on SIGINT/SIGTERM.
 - **Persistence:** `internal/db.Store` — Mongo (`DATABASE_DRIVER=mongo` + `MONGO_URI`) or Postgres/SQLite via GORM (`DATABASE_DRIVER=postgres|sqlite` with `DATABASE_DSN` / `SQLITE_PATH`). When `ENABLE_AUTH=false`, crawl jobs use `MemoryStore` (no users or API keys; see `cmd/main.go` and `internal/db`).
 - **Product spec / roadmap:** `PLAN.md` describes the original Firecrawl-like goals; the tree under `internal/` is the source of truth for what is implemented today.
 
@@ -13,8 +13,8 @@ This file orients automated coding agents and contributors to the **gocrawl** re
 
 | Path | Role |
 |------|------|
-| `cmd/main.go` | Wiring: config, DB init, middleware, route registration. |
-| `internal/api/` | HTTP handlers, crawl manager, middleware (auth, CORS, logging). |
+| `cmd/main.go` | Wiring: config, DB init, Gin engine, `http.Server` timeouts, graceful shutdown. |
+| `internal/api/` | Gin routes (`router.go`), handlers, crawl manager, middleware (auth, CORS, logging, rate limit). |
 | `internal/config/` | `config.Load()` and env-backed structs (server, database, security, crawler, retention, rate limits, SSE). |
 | `internal/crawler/` | Colly-based crawl/scrape execution; chromedp remote (Lightpanda) with auto fallback and `forceBrowser` (see `README.md` / `LIGHTPANDA_*`, `CHROMEDP_*`). |
 | `internal/extractor/` | HTML → Markdown and related extraction. |

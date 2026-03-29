@@ -22,6 +22,13 @@ type Config struct {
 type ServerConfig struct {
 	Port string
 	Host string
+	// HTTP server tuning (0 = use stdlib default where applicable; WriteTimeout 0 disables limit).
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	MaxHeaderBytes    int
+	ShutdownTimeout   time.Duration
 }
 
 type DatabaseConfig struct {
@@ -77,8 +84,14 @@ type SSEConfig struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Port: viper.GetString("PORT"),
-			Host: viper.GetString("HOST"),
+			Port:              viper.GetString("PORT"),
+			Host:              viper.GetString("HOST"),
+			ReadHeaderTimeout: viper.GetDuration("SERVER_READ_HEADER_TIMEOUT"),
+			ReadTimeout:       viper.GetDuration("SERVER_READ_TIMEOUT"),
+			WriteTimeout:      viper.GetDuration("SERVER_WRITE_TIMEOUT"),
+			IdleTimeout:       viper.GetDuration("SERVER_IDLE_TIMEOUT"),
+			MaxHeaderBytes:    viper.GetInt("SERVER_MAX_HEADER_BYTES"),
+			ShutdownTimeout:   viper.GetDuration("SERVER_SHUTDOWN_TIMEOUT"),
 		},
 		Database: DatabaseConfig{
 			Driver:     viper.GetString("DATABASE_DRIVER"),
@@ -127,6 +140,22 @@ func Load() (*Config, error) {
 	// Set defaults
 	if cfg.Server.Port == "" {
 		cfg.Server.Port = "8151"
+	}
+	if cfg.Server.ReadHeaderTimeout == 0 {
+		cfg.Server.ReadHeaderTimeout = 10 * time.Second
+	}
+	if cfg.Server.ReadTimeout == 0 {
+		cfg.Server.ReadTimeout = 60 * time.Second
+	}
+	// WriteTimeout 0: no limit (long scrapes / streaming)
+	if cfg.Server.IdleTimeout == 0 {
+		cfg.Server.IdleTimeout = 120 * time.Second
+	}
+	if cfg.Server.MaxHeaderBytes == 0 {
+		cfg.Server.MaxHeaderBytes = 1 << 20
+	}
+	if cfg.Server.ShutdownTimeout == 0 {
+		cfg.Server.ShutdownTimeout = 30 * time.Second
 	}
 	if cfg.Database.MongoURI == "" {
 		cfg.Database.MongoURI = "mongodb://localhost:27017"

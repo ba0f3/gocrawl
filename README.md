@@ -156,6 +156,13 @@ Environment variables can be set in the `.env` file or as system environment var
 |----------|-------------|
 | `PORT` | Server port (default: `8151`) |
 | `HOST` | Bind address (default: empty; use `0.0.0.0` to listen on all interfaces) |
+| `GIN_MODE` | `debug` for verbose Gin logging; otherwise release mode (default) |
+| `SERVER_READ_HEADER_TIMEOUT` | Max time to read request headers (default: `10s`; mitigates slow clients) |
+| `SERVER_READ_TIMEOUT` | Max time to read the full request including body (default: `60s`) |
+| `SERVER_WRITE_TIMEOUT` | Max time to write the response; `0` or unset means no limit (default), which suits long scrapes and SSE |
+| `SERVER_IDLE_TIMEOUT` | Keep-alive idle timeout (default: `120s`) |
+| `SERVER_MAX_HEADER_BYTES` | Maximum request header size in bytes (default: `1048576`) |
+| `SERVER_SHUTDOWN_TIMEOUT` | Graceful shutdown deadline after SIGINT/SIGTERM (default: `30s`) |
 
 ### Database
 
