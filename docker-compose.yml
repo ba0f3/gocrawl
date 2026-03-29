@@ -23,3 +23,9 @@ services:
       # - PROXIES=http://proxy1:port,http://proxy2:port
       # - ENABLE_PROXY_ROTATION=true    
     restart: unless-stopped
+
+  lightpanda:
+    image: lightpanda/browser:nightly
+    ports:
+      - "9222:9222"
+    restart: unless-stopped

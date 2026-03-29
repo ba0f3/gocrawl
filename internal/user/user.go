@@ -3,13 +3,13 @@ package user
 import (
 	"fmt"
 
-	"golang.org/x/crypto/bcrypt"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 
 	"gocrawl/internal/db"
 )
 
-func Register(database *db.Database, username, password string) (*db.User, error) {
+func Register(database db.Store, username, password string) (*db.User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func Register(database *db.Database, username, password string) (*db.User, error
 	return user, nil
 }
 
-func Login(database *db.Database, username, password string) (*db.User, error) {
+func Login(database db.Store, username, password string) (*db.User, error) {
 	user, err := database.GetUserByUsername(username)
 	if err != nil {
 		return nil, err
@@ -45,6 +45,6 @@ func Login(database *db.Database, username, password string) (*db.User, error) {
 	return user, nil
 }
 
-func GetUserByAPIKey(database *db.Database, apiKey string) (*db.User, error) {
+func GetUserByAPIKey(database db.Store, apiKey string) (*db.User, error) {
 	return database.GetUserByAPIKey(apiKey)
 }

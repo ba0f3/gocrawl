@@ -100,7 +100,7 @@ func sseStreamingExample(baseURL string) {
 		if strings.HasPrefix(line, "data: ") {
 			data := strings.TrimPrefix(line, "data: ")
 			data = strings.TrimSpace(data)
-			
+
 			// Parse JSON data
 			var event map[string]interface{}
 			if err := json.Unmarshal([]byte(data), &event); err == nil {

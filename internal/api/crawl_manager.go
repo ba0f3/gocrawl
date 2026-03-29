@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/url"
 	"strings"
@@ -14,38 +16,82 @@ import (
 	"github.com/gocolly/colly/v2"
 )
 
-// CrawlManager manages crawl jobs
+// CrawlManager drains queued crawl jobs with a worker pool.
 type CrawlManager struct {
-	db  *db.Database
-	cfg *config.Config
-	sync.Mutex
+	store db.Store
+	cfg   *config.Config
 }
 
-// NewCrawlManager creates a new crawl manager
-func NewCrawlManager(db *db.Database, cfg *config.Config) *CrawlManager {
+// NewCrawlManager creates a new crawl manager.
+func NewCrawlManager(store db.Store, cfg *config.Config) *CrawlManager {
 	return &CrawlManager{
-		db:  db,
-		cfg: cfg,
+		store: store,
+		cfg:   cfg,
 	}
 }
 
-// StartCrawl starts an asynchronous crawl job
-func (cm *CrawlManager) StartCrawl(jobID string, req *CrawlRequestBody) {
-	cm.Lock()
-	defer cm.Unlock()
+// StartWorkers launches N goroutines that claim jobs from the store.
+func (cm *CrawlManager) StartWorkers(n int) {
+	if n < 1 {
+		n = 1
+	}
+	for i := 0; i < n; i++ {
+		go cm.workerLoop(i)
+	}
+	log.Printf("Started %d crawl worker(s)", n)
+}
 
-	log.Printf("Starting crawl for job ID: %s", jobID)
+func (cm *CrawlManager) workerLoop(id int) {
+	for {
+		job, err := cm.store.ClaimNextQueuedJob()
+		if err != nil {
+			log.Printf("crawl worker %d: claim error: %v", id, err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		if job == nil {
+			time.Sleep(time.Second)
+			continue
+		}
+		var req CrawlRequestBody
+		if err := json.Unmarshal([]byte(job.RequestJSON), &req); err != nil {
+			log.Printf("crawl worker %d: bad job payload %s: %v", id, job.ID, err)
+			cm.failJob(job.ID, "invalid job payload")
+			continue
+		}
+		cm.runCrawlJob(job.ID, &req)
+	}
+}
 
-	// Update status to running
+func (cm *CrawlManager) failJob(jobID, msg string) {
+	job, err := cm.store.GetCrawlJob(jobID)
+	if err != nil {
+		log.Printf("failJob: get job: %v", err)
+		return
+	}
+	job.Status = "failed"
+	if err := cm.store.UpdateCrawlJob(job); err != nil {
+		log.Printf("failJob: update: %v", err)
+	}
+	log.Printf("job %s failed: %s", jobID, msg)
+}
+
+// runCrawlJob executes a single crawl job (called by workers).
+func (cm *CrawlManager) runCrawlJob(jobID string, req *CrawlRequestBody) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("crawl panic job %s: %v", jobID, r)
+			cm.failJob(jobID, fmt.Sprint(r))
+		}
+	}()
+	log.Printf("Running crawl for job ID: %s", jobID)
+
 	cm.updateCrawlStatus(jobID, "crawling", 0)
 
-	// Perform multi-page crawl
 	results := cm.performCrawling(req, jobID)
 
-	// Update total count
 	cm.updateCrawlTotal(jobID, len(results))
 
-	// Save results
 	for _, result := range results {
 		cr := db.CrawlResult{
 			JobID:    jobID,
@@ -56,98 +102,108 @@ func (cm *CrawlManager) StartCrawl(jobID string, req *CrawlRequestBody) {
 			Links:    result.Links,
 			Metadata: result.Metadata,
 		}
-		if err := cm.db.CreateCrawlResult(&cr); err != nil {
+		if err := cm.store.CreateCrawlResult(&cr); err != nil {
 			log.Printf("Error saving crawl result: %v", err)
 		}
 	}
 
-	// Update job status
 	cm.updateCrawlStatus(jobID, "completed", len(results))
-
 	log.Printf("Crawl completed for job ID: %s", jobID)
 }
 
-// updateCrawlStatus updates the status of a crawl job
 func (cm *CrawlManager) updateCrawlStatus(jobID string, status string, completed int) {
-	job, err := cm.db.GetCrawlJob(jobID)
+	job, err := cm.store.GetCrawlJob(jobID)
 	if err != nil {
 		log.Printf("Error retrieving crawl job for status update: %v", err)
 		return
 	}
-
 	job.Status = status
 	job.Completed = completed
-	if err := cm.db.UpdateCrawlJob(job); err != nil {
+	if err := cm.store.UpdateCrawlJob(job); err != nil {
 		log.Printf("Error updating crawl job status: %v", err)
 	}
 }
 
-// updateCrawlTotal updates the total count for a crawl job
 func (cm *CrawlManager) updateCrawlTotal(jobID string, total int) {
-	job, err := cm.db.GetCrawlJob(jobID)
+	job, err := cm.store.GetCrawlJob(jobID)
 	if err != nil {
 		log.Printf("Error retrieving crawl job for total update: %v", err)
 		return
 	}
-
 	job.Total = total
-	if err := cm.db.UpdateCrawlJob(job); err != nil {
+	if err := cm.store.UpdateCrawlJob(job); err != nil {
 		log.Printf("Error updating crawl job total: %v", err)
 	}
 }
 
-// performCrawling performs a multi-page scrape based on the request
+// linkInArticleOrMain is true when the anchor sits under common article/main containers.
+func linkInArticleOrMain(e *colly.HTMLElement) bool {
+	node := e.DOM
+	for _, sel := range []string{"article", "main", "[role=main]", ".post", ".entry-content", ".entry-title"} {
+		if node.ParentsFiltered(sel).Length() > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func (cm *CrawlManager) performCrawling(req *CrawlRequestBody, jobID string) []*crawler.ScrapeResult {
 	results := make([]*crawler.ScrapeResult, 0)
 	visited := make(map[string]bool)
+	var crawlMu sync.Mutex
 	completedCount := 0
 
-	// Parse base URL
 	baseURL, err := url.Parse(req.URL)
 	if err != nil {
 		log.Printf("Error parsing base URL: %v", err)
 		return results
 	}
 
-	// Create colly collector
 	c := colly.NewCollector(
 		colly.MaxDepth(req.MaxDepth),
 		colly.Async(true),
 	)
 
-	// Set concurrency
+	delayMs := req.Delay
+	if cm.cfg.Crawler.CrawlMinDelay > 0 {
+		globalMs := int(cm.cfg.Crawler.CrawlMinDelay / time.Millisecond)
+		if globalMs > delayMs {
+			delayMs = globalMs
+		}
+	}
+
 	c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
 		Parallelism: req.MaxConcurrency,
-		Delay:       time.Duration(req.Delay) * time.Millisecond,
+		Delay:       time.Duration(delayMs) * time.Millisecond,
 	})
 
-	// Configure based on request options
+	if t := crawler.NewRetryTransport(cm.cfg); t != nil {
+		c.WithTransport(t)
+	}
+
 	if !req.AllowExternalLinks {
 		c.AllowedDomains = append(c.AllowedDomains, baseURL.Host)
 	}
 
-	// Handle found links
-	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
-		link := e.Attr("href")
-		absURL := e.Request.AbsoluteURL(link)
-
-		// Apply filters
-		if cm.shouldScrapeURL(absURL, baseURL, req) && !visited[absURL] {
-			visited[absURL] = true
-			if len(visited) <= req.Limit {
-				e.Request.Visit(absURL)
-			}
-		}
+	// Prefer links inside article/main-like regions (visited first via earlier OnHTML registration).
+	c.OnHTML("article a[href], main a[href], [role=main] a[href], .post a[href], .entry-content a[href]", func(e *colly.HTMLElement) {
+		cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
 	})
-
-	// Process each page
-	c.OnScraped(func(r *colly.Response) {
-		if completedCount >= req.Limit {
+	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
+		if linkInArticleOrMain(e) {
 			return
 		}
+		cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
+	})
 
-		// Create scrape request for this page
+	c.OnScraped(func(r *colly.Response) {
+		crawlMu.Lock()
+		if completedCount >= req.Limit {
+			crawlMu.Unlock()
+			return
+		}
+		crawlMu.Unlock()
 		scrapeReq := req.ScrapeOptions
 		if scrapeReq == nil {
 			scrapeReq = &crawler.ScrapeRequest{
@@ -157,47 +213,53 @@ func (cm *CrawlManager) performCrawling(req *CrawlRequestBody, jobID string) []*
 		}
 		scrapeReq.URL = r.Request.URL.String()
 
-		// Scrape the page
 		result, err := crawler.ScrapeURL(scrapeReq, cm.cfg)
 		if err != nil {
 			log.Printf("Error scraping page %s: %v", r.Request.URL, err)
 			return
 		}
-
+		crawlMu.Lock()
 		results = append(results, result)
 		completedCount++
-
-		// Update progress periodically
-		if completedCount%10 == 0 {
-			cm.updateCrawlStatus(jobID, "crawling", completedCount)
+		cc := completedCount
+		crawlMu.Unlock()
+		if cc%10 == 0 {
+			cm.updateCrawlStatus(jobID, "crawling", cc)
 		}
 	})
 
-	// Start scraping
-	c.Visit(req.URL)
+	_ = c.Visit(req.URL)
 	c.Wait()
 
 	return results
 }
 
-// shouldScrapeURL determines if a URL should be scraped based on filters
+func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, req *CrawlRequestBody, visited map[string]bool, mu *sync.Mutex) {
+	link := e.Attr("href")
+	absURL := e.Request.AbsoluteURL(link)
+	mu.Lock()
+	if cm.shouldScrapeURL(absURL, baseURL, req) && !visited[absURL] {
+		visited[absURL] = true
+		if len(visited) <= req.Limit {
+			mu.Unlock()
+			_ = e.Request.Visit(absURL)
+			return
+		}
+	}
+	mu.Unlock()
+}
+
 func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, req *CrawlRequestBody) bool {
 	parsedURL, err := url.Parse(absURL)
 	if err != nil {
 		return false
 	}
-
-	// Check if external link
 	if !req.AllowExternalLinks && parsedURL.Host != baseURL.Host {
 		return false
 	}
-
-	// Check subdomain
 	if !req.AllowSubdomains && parsedURL.Host != baseURL.Host {
 		return false
 	}
-
-	// Check include paths
 	if len(req.IncludePaths) > 0 {
 		included := false
 		for _, path := range req.IncludePaths {
@@ -210,13 +272,10 @@ func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, req *Cr
 			return false
 		}
 	}
-
-	// Check exclude paths
 	for _, path := range req.ExcludePaths {
 		if strings.Contains(parsedURL.Path, path) {
 			return false
 		}
 	}
-
 	return true
 }

@@ -7,7 +7,7 @@ import (
 
 func TestToMarkdown(t *testing.T) {
 	htmlInput := `<h1>Hello World</h1><p>This is a <strong>test</strong> paragraph with <em>italic</em> text.</p>`
-	expected := []string{"# Hello World", "**test**", "_italic_"}
+	expected := []string{"# Hello World", "**test**", "*italic*"}
 
 	result, err := ToMarkdown(htmlInput)
 	if err != nil {

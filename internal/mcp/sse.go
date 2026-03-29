@@ -17,16 +17,16 @@ type SSEEvent struct {
 
 // SSEClient represents a connected SSE client
 type SSEClient struct {
-	ID       string
-	Events   chan SSEEvent
-	Done     chan bool
-	UserID   string
+	ID     string
+	Events chan SSEEvent
+	Done   chan bool
+	UserID string
 }
 
 // SSEManager manages SSE connections
 type SSEManager struct {
-	clients map[string]*SSEClient
-	mu      sync.RWMutex
+	clients   map[string]*SSEClient
+	mu        sync.RWMutex
 	broadcast chan SSEEvent
 }
 
@@ -36,10 +36,10 @@ func NewSSEManager() *SSEManager {
 		clients:   make(map[string]*SSEClient),
 		broadcast: make(chan SSEEvent, 100),
 	}
-	
+
 	// Start broadcast handler
 	go manager.handleBroadcasts()
-	
+
 	return manager
 }
 
@@ -47,15 +47,15 @@ func NewSSEManager() *SSEManager {
 func (m *SSEManager) AddClient(client *SSEClient) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.clients[client.ID] = client
 	log.Printf("SSE client %s connected", client.ID)
-	
+
 	// Send connection event
 	client.Events <- SSEEvent{
 		Type: "connected",
 		Data: map[string]interface{}{
-			"message": "SSE connection established",
+			"message":  "SSE connection established",
 			"clientId": client.ID,
 		},
 		Timestamp: time.Now(),
@@ -66,7 +66,7 @@ func (m *SSEManager) AddClient(client *SSEClient) {
 func (m *SSEManager) RemoveClient(clientID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if client, ok := m.clients[clientID]; ok {
 		close(client.Events)
 		close(client.Done)
@@ -80,11 +80,11 @@ func (m *SSEManager) SendToClient(clientID string, event SSEEvent) error {
 	m.mu.RLock()
 	client, ok := m.clients[clientID]
 	m.mu.RUnlock()
-	
+
 	if !ok {
 		return fmt.Errorf("client %s not found", clientID)
 	}
-	
+
 	select {
 	case client.Events <- event:
 		return nil
@@ -111,7 +111,7 @@ func (m *SSEManager) BroadcastCrawlUpdate(job *CrawlJob) {
 		},
 		Timestamp: time.Now(),
 	}
-	
+
 	if job.Status == "completed" {
 		event.Type = "crawl_completed"
 		if job.EndTime != nil {
@@ -123,7 +123,7 @@ func (m *SSEManager) BroadcastCrawlUpdate(job *CrawlJob) {
 	} else if job.Status == "running" && job.Progress == 1 {
 		event.Type = "crawl_started"
 	}
-	
+
 	m.Broadcast(event)
 }
 
@@ -136,7 +136,7 @@ func (m *SSEManager) handleBroadcasts() {
 			clients = append(clients, client)
 		}
 		m.mu.RUnlock()
-		
+
 		for _, client := range clients {
 			select {
 			case client.Events <- event:
@@ -151,13 +151,13 @@ func (m *SSEManager) handleBroadcasts() {
 // FormatSSEMessage formats an event for SSE transmission
 func FormatSSEMessage(event SSEEvent) (string, error) {
 	data, err := json.Marshal(map[string]interface{}{
-		"type": event.Type,
-		"data": event.Data,
+		"type":      event.Type,
+		"data":      event.Data,
 		"timestamp": event.Timestamp.Format(time.RFC3339),
 	})
 	if err != nil {
 		return "", err
 	}
-	
+
 	return fmt.Sprintf("data: %s\n\n", string(data)), nil
 }

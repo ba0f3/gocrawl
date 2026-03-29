@@ -17,7 +17,7 @@ import (
 // MCPServer represents the MCP server instance
 type MCPServer struct {
 	server    *mcp.Server
-	db        *db.Database
+	db        db.Store
 	cfg       *config.Config
 	crawlJobs map[string]*CrawlJob
 }
@@ -50,7 +50,7 @@ type CrawlArgs struct {
 }
 
 // NewMCPServer creates a new MCP server instance
-func NewMCPServer(database *db.Database, cfg *config.Config) (*MCPServer, error) {
+func NewMCPServer(database db.Store, cfg *config.Config) (*MCPServer, error) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "gocrawl-mcp",
 		Version: "1.0.0",
@@ -204,20 +204,17 @@ func (s *MCPServer) handleStats(ctx context.Context, _ *mcp.CallToolRequest, _ S
 		"failedJobs":    0,
 		"jobs":          []map[string]interface{}{},
 	}
-
-	// Count jobs by status
-	for _, job := range s.crawlJobs {
-		switch job.Status {
-		case "running":
-			stats["activeJobs"] = stats["activeJobs"].(int) + 1
-		case "pending":
-			stats["pendingJobs"] = stats["pendingJobs"].(int) + 1
-		case "completed":
-			stats["completedJobs"] = stats["completedJobs"].(int) + 1
-		case "failed":
-			stats["failedJobs"] = stats["failedJobs"].(int) + 1
+	if s.db != nil {
+		q, cr, co, f, err := s.db.JobCountsByStatus()
+		if err == nil {
+			stats["pendingJobs"] = q
+			stats["activeJobs"] = cr
+			stats["completedJobs"] = co
+			stats["failedJobs"] = f
 		}
+	}
 
+	for _, job := range s.crawlJobs {
 		jobInfo := map[string]interface{}{
 			"id":       job.ID,
 			"url":      job.URL,

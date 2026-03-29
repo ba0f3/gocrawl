@@ -15,28 +15,32 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type Handler struct {
-	DB           *db.Database
+	DB           db.Store
 	Cfg          *config.Config
 	crawlManager *CrawlManager
 	SSEManager   *mcp.SSEManager
 	MCPServer    *mcp.MCPServer
 }
 
-func NewHandler(database *db.Database, cfg *config.Config) *Handler {
+func NewHandler(store db.Store, cfg *config.Config) *Handler {
 	sseManager := mcp.NewSSEManager()
-	mcpServer, _ := mcp.NewMCPServer(database, cfg)
+	mcpServer, _ := mcp.NewMCPServer(store, cfg)
 
 	return &Handler{
-		DB:           database,
+		DB:           store,
 		Cfg:          cfg,
-		crawlManager: NewCrawlManager(database, cfg),
+		crawlManager: NewCrawlManager(store, cfg),
 		SSEManager:   sseManager,
 		MCPServer:    mcpServer,
 	}
+}
+
+// StartCrawlWorkers starts the configured number of background crawl workers.
+func (h *Handler) StartCrawlWorkers() {
+	h.crawlManager.StartWorkers(h.Cfg.Crawler.CrawlWorkers)
 }
 
 type ApiResponse struct {
@@ -149,17 +153,15 @@ type CrawlResponse struct {
 }
 
 func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
-	// Get user from context (set by auth middleware)
-	var userObjID primitive.ObjectID
+	var userID string
 	if user, ok := r.Context().Value("user").(*db.User); ok && user != nil {
-		userObjID = user.ID
+		userID = user.ID
 	} else {
-		if !h.Cfg.Security.EnableAuth {
+		if h.Cfg.Security.EnableAuth {
 			writeResponse(w, http.StatusUnauthorized, nil, fmt.Errorf("unauthorized"))
 			return
 		}
-		// Use default user ID when auth is disabled
-		userObjID = primitive.NewObjectID()
+		userID = uuid.New().String()
 	}
 
 	var req CrawlRequestBody
@@ -168,7 +170,6 @@ func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set defaults
 	if req.MaxDepth == 0 {
 		req.MaxDepth = 10
 	}
@@ -179,28 +180,30 @@ func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
 		req.MaxConcurrency = 10
 	}
 
-	// Create a new crawl job
-	jobID := uuid.New().String()
-	crawlJob := &db.CrawlJob{
-		ID:          jobID,
-		URL:         req.URL,
-		Status:      "crawling",
-		Total:       0,
-		Completed:   0,
-		CreditsUsed: 0,
-		ExpiresAt:   time.Now().Add(24 * time.Hour), // Jobs expire after 24 hours
-		UserID:      userObjID,
-		CreatedAt:   time.Now(),
-	}
-
-	// Save job to database
-	if err := h.DB.CreateCrawlJob(crawlJob); err != nil {
+	payload, err := json.Marshal(&req)
+	if err != nil {
 		writeResponse(w, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	// Start crawl asynchronously
-	go h.crawlManager.StartCrawl(jobID, &req)
+	jobID := uuid.New().String()
+	crawlJob := &db.CrawlJob{
+		ID:          jobID,
+		URL:         req.URL,
+		Status:      "queued",
+		Total:       0,
+		Completed:   0,
+		CreditsUsed: 0,
+		ExpiresAt:   time.Now().Add(24 * time.Hour),
+		UserID:      userID,
+		CreatedAt:   time.Now(),
+		RequestJSON: string(payload),
+	}
+
+	if err := h.DB.CreateCrawlJob(crawlJob); err != nil {
+		writeResponse(w, http.StatusInternalServerError, nil, err)
+		return
+	}
 
 	// Return job ID immediately
 	response := CrawlResponse{

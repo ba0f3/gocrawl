@@ -5,9 +5,13 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
+	"gocrawl/internal/config"
 	"gocrawl/internal/db"
 	"gocrawl/internal/user"
+
+	"golang.org/x/time/rate"
 )
 
 // LoggingMiddleware logs HTTP requests
@@ -35,7 +39,7 @@ func CORSMiddleware(next http.Handler) http.Handler {
 }
 
 // AuthMiddleware validates API keys
-func AuthMiddleware(database *db.Database, enableAuth bool) func(http.Handler) http.Handler {
+func AuthMiddleware(database db.Store, enableAuth bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip authentication if disabled
@@ -67,6 +71,48 @@ func AuthMiddleware(database *db.Database, enableAuth bool) func(http.Handler) h
 			// Add user to request context
 			ctx := context.WithValue(r.Context(), "user", u)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// RateLimitMiddleware limits requests per client (API key when present, else remote IP).
+func RateLimitMiddleware(cfg config.RateLimitConfig) func(http.Handler) http.Handler {
+	var mu sync.Mutex
+	limiters := make(map[string]*rate.Limiter)
+	var r rate.Limit
+	if cfg.Window > 0 && cfg.Requests > 0 {
+		r = rate.Limit(float64(cfg.Requests) / cfg.Window.Seconds())
+	} else {
+		r = rate.Inf
+	}
+	if r <= 0 {
+		r = rate.Inf
+	}
+	burst := cfg.Requests
+	if burst < 1 {
+		burst = 1
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			key := "ip:" + req.RemoteAddr
+			if ah := req.Header.Get("Authorization"); ah != "" {
+				parts := strings.SplitN(ah, " ", 2)
+				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && parts[1] != "" {
+					key = "key:" + parts[1]
+				}
+			}
+			mu.Lock()
+			lim, ok := limiters[key]
+			if !ok {
+				lim = rate.NewLimiter(r, burst)
+				limiters[key] = lim
+			}
+			mu.Unlock()
+			if !lim.Allow() {
+				http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, req)
 		})
 	}
 }
