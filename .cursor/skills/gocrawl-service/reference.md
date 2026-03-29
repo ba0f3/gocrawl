@@ -24,7 +24,7 @@ docker compose up --build -d
 
 4. Base URL for HTTP calls: **`http://localhost:8080`** (or your host). API routes live under **`/v1`**.
 
-5. Optional: set **`LIGHTPANDA_WS_URL`** in `.env` to the WebSocket URL of the Lightpanda service (e.g. `ws://lightpanda:9222/...` inside the compose network) so the server can fall back to a browser for JS-heavy pages. See `internal/config/config.go` and `README.md`.
+5. **Lightpanda / chromedp:** With Compose, **`LIGHTPANDA_HTTP_URL`** defaults to **`http://lightpanda:9222`** on the **gocrawl** service so the process can resolve the CDP socket via **`/json/version`** (no manual `ws://…` paste). Alternatively set **`LIGHTPANDA_WS_URL`** to the full `webSocketDebuggerUrl`. Auto fallback uses chromedp after Colly for errors, selected HTTP statuses (401/403/429/503 by default), challenge-style HTML, SPA shells, or very thin main markdown; set **`CHROMEDP_AUTO_FALLBACK=false`** to disable that and use only JSON **`forceBrowser: true`**. After navigation, chromedp polls **`document.readyState`** with short CDP calls until **`complete`** or **stable `interactive`** (many SPAs never fire `complete` after API calls), then optional **`CHROMEDP_NAV_WAIT`** and hydration delays are **paced** with tiny CDP evaluations so Lightpanda is less likely to log **CDP timeout** on an idle socket while the page finishes XHR-driven rendering. See `README.md` (Configuration) for **`CHROMEDP_*`** tuning and anti-bot limitations.
 
 ### Optional MongoDB overlay
 
@@ -100,7 +100,7 @@ Returns **`CrawlStatusResponse`** directly (no `success` wrapper): `status`, `to
 - **Purpose:** Fetch **one URL**, extract content (Markdown/HTML), metadata, and links — **synchronously** in the HTTP request.
 - **Method:** `POST`
 - **Body:** `ScrapeRequest` JSON (see below).
-- **Flow:** HTTP fetch → HTML parse → optional chromedp fallback if configured and needed → JSON response in **`data`**.
+- **Flow:** unless **`forceBrowser: true`**, HTTP fetch (Colly) → HTML parse → optional chromedp fallback if Lightpanda is configured and auto-heuristics match (or always when **`forceBrowser`**) → JSON response in **`data`**. Check **`metadata.chromedpTrigger`** when **`extractor`** is **`chromedp`** (e.g. **`spa_shell`** for empty mount nodes, **`csr_framework`** when HTML matches Vue/React/Next/Nuxt/Angular/SvelteKit/Remix/Astro/Vite-style signatures).
 
 ### `ScrapeRequest` (main fields)
 
@@ -114,6 +114,7 @@ Returns **`CrawlStatusResponse`** directly (no `success` wrapper): `status`, `to
 | `includeTags` / `excludeTags` | Tag filters where supported. |
 | `timeout` | Per-request timeout hint where used. |
 | `removeBase64Images` | Strip base64 images from output when true. |
+| `forceBrowser` | If `true` and Lightpanda env is set, load the page with chromedp only (skip Colly). |
 
 Use **`POST /v1/scrape`** when you need a **single page** result immediately.
 

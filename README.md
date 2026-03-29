@@ -9,7 +9,7 @@ A production-grade Go web crawler that provides a Firecrawl-compatible API for w
 - Multiple backends: MongoDB or SQL (PostgreSQL / SQLite via GORM)
 - Optional user authentication with API keys
 - REST API under `/v1` (Firecrawl-style)
-- Optional HTTP rate limiting, crawl retries, and chromedp/Lightpanda fallback for JS-heavy pages
+- Optional HTTP rate limiting, crawl retries, and chromedp/Lightpanda (auto fallback for CSR, HTTP 401/403/429/503, challenge pages, or `forceBrowser`)
 - Automatic data cleanup and crawl job progress tracking
 
 ## Quick start (Docker / GHCR)
@@ -123,7 +123,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-Compose loads `.env` when present (`env_file`); variables also support defaults in `docker-compose.yml`. For a typical no-auth scrape API, keep `ENABLE_AUTH=false` in `.env` (no database required).
+Compose loads `.env` when present (`env_file`); variables also support defaults in `docker-compose.yml`. For a typical no-auth scrape API, keep `ENABLE_AUTH=false` in `.env` (no database required). The **gocrawl** service defaults **`LIGHTPANDA_HTTP_URL=http://lightpanda:9222`** so chromedp can resolve the CDP WebSocket from Lightpanda’s `/json/version` without pasting a full `ws://…` URL (override or clear the variable if you do not run Lightpanda).
 
 #### Optional MongoDB (`docker-compose.mongo.yml`)
 
@@ -180,9 +180,22 @@ Environment variables can be set in the `.env` file or as system environment var
 |----------|-------------|
 | `CRAWL_WORKERS` | Goroutines that drain the crawl job queue (default: same as `MAX_CONCURRENT_CRAWLS`) |
 | `MAX_CONCURRENT_CRAWLS` | Default per-job Colly parallelism (default: `10`) |
+| `CRAWL_TIMEOUT` | Default per-request timeout (e.g. `30s`) |
+| `USER_AGENT` | User-Agent for Colly and chromedp |
 | `CRAWL_MAX_RETRIES` | HTTP retries for 429/5xx (default: `3`) |
-| `LIGHTPANDA_WS_URL` | Optional CDP WebSocket URL for JS fallback scraping |
+| `LIGHTPANDA_WS_URL` | Optional full CDP WebSocket URL (e.g. from `GET http://host:9222/json/version` → `webSocketDebuggerUrl`) |
+| `LIGHTPANDA_HTTP_URL` | Optional HTTP base (e.g. `http://lightpanda:9222`); first chromedp use resolves and caches `webSocketDebuggerUrl` |
+| `CHROMEDP_AUTO_FALLBACK` | When `true` (default), automatically use chromedp after Colly when heuristics match (thin main text, SPA shell, challenge HTML, configured status codes, errors). Set `false` to only use chromedp with JSON `forceBrowser: true` |
+| `CHROMEDP_FALLBACK_STATUS_CODES` | Comma-separated HTTP statuses that trigger auto fallback (default `401,403,429,503` if unset) |
+| `CHROMEDP_MAX_CONCURRENT` | Max concurrent chromedp sessions (default `8` if unset or `0`) |
+| `CHROMEDP_LOAD_WAIT_TIMEOUT` | Max time to poll `document.readyState` after navigation (default `30s`; capped under the scrape timeout). Stops on **`complete`** or on two consecutive **`interactive`** reads (SPAs often never reach `complete` after XHRs, which used to spin until Lightpanda’s CDP timeout). Short `Evaluate` calls only |
+| `CHROMEDP_NAV_WAIT` | Post-load settle before hydration (default `500ms` if unset; set `0s` to disable). Longer waits are **paced** with tiny CDP pings so idle sessions are less likely to hit Lightpanda’s **CDP timeout** |
+| `CHROMEDP_HYDRATION_POLL_INTERVAL` | Delay between hydration polls (default `300ms`, also paced with CDP pings) |
+| `CHROMEDP_HYDRATION_MAX_POLLS` | Max hydration polls (default `22`) |
+| `CHROMEDP_HYDRATION_MIN_TEXT_RUNES` | Stop polling when main-selector text length reaches this (default `80`) |
 | `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW` | If both set (e.g. `100` and `1m`), enables per-client rate limiting on `/v1` |
+
+**Chromedp limitations:** Running pages in Lightpanda helps with **client-side rendering** and some **simple bot or challenge pages**, but it does **not** guarantee bypass of advanced anti-bot (CAPTCHA vendors, strict TLS/JA3 fingerprinting, etc.). Difficult sites may need proxies, a full browser profile, or manual steps.
 
 ### Data retention
 
@@ -219,8 +232,11 @@ export BASE_URL="http://localhost:8080"
 | Content root | `contentSelector` | One CSS selector for the node whose HTML is converted to markdown / stored as `html`. |
 | Content root | `contentSelectors` | More selectors, tried in order after `contentSelector`. |
 | Links list | `linkSelector` | Optional. **Omitted:** collect links only inside the same DOM subtree as the extracted content (e.g. only under `<article>` when that block is used for markdown), with **URLs de-duplicated**. **Set:** run this selector against the **full page** (e.g. `a[href]` for every anchor on the page). |
+| Browser-only | `forceBrowser` | When `true` and `LIGHTPANDA_WS_URL` or `LIGHTPANDA_HTTP_URL` is set, **skips the Colly HTTP fetch** and loads the page with chromedp only. Metadata includes `chromedpTrigger: force_browser`. |
 
 If `contentSelector` or `contentSelectors` are set, they **replace** the built-in main-content list (`main`, `article`, …). If no selector matches, the extractor falls back to `body`. `onlyMainContent` applies only when you do **not** set custom content selectors.
+
+When chromedp runs (auto fallback or `forceBrowser`), **`metadata`** may include `extractor: chromedp` and **`chromedpTrigger`** (`thin_markdown`, `spa_shell`, `csr_framework` for Vue/React/Next/Nuxt/Angular/SvelteKit/Remix/Astro/Vite-style shells, `challenge_html`, `status_403`, `visit_error`, etc.).
 
 ### Crawl body (`POST /v1/crawl`)
 

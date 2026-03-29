@@ -1,0 +1,3 @@
+services:
+  lightpanda:
+    network_mode: host

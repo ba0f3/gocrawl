@@ -101,3 +101,25 @@ func SelectorsJS(selectors []string) string {
 		strings.Join(parts, ","),
 	)
 }
+
+// SelectorsMaxTextLenJS returns an IIFE that yields the maximum trimmed textContent length among the given selectors (0 if none match).
+func SelectorsMaxTextLenJS(selectors []string) string {
+	if len(selectors) == 0 {
+		selectors = MainContentSelectors()
+	}
+	var parts []string
+	for _, s := range selectors {
+		j, err := json.Marshal(s)
+		if err != nil {
+			continue
+		}
+		parts = append(parts, string(j))
+	}
+	if len(parts) == 0 {
+		parts = append(parts, `"body"`)
+	}
+	return fmt.Sprintf(
+		`(function(){var sels=[%s];var m=0;for(var i=0;i<sels.length;i++){var el=document.querySelector(sels[i]);if(el){var t=(el.textContent||"").replace(/\s+/g," ").trim();if(t.length>m)m=t.length;}}return m;})()`,
+		strings.Join(parts, ","),
+	)
+}

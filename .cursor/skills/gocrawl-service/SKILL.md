@@ -37,7 +37,7 @@ MCP JSON routes: `POST /v1/mcp/scrape`, `POST /v1/mcp/crawl`, `GET /v1/mcp/stats
 
 ## Docker (short)
 
-**Compose (no Mongo):** `cp .env.example .env`, set `ENABLE_AUTH=false` for simplest setup, then `docker compose up --build -d`.
+**Compose (no Mongo):** `cp .env.example .env`, set `ENABLE_AUTH=false` for simplest setup, then `docker compose up --build -d`. Compose defaults **`LIGHTPANDA_HTTP_URL=http://lightpanda:9222`** for chromedp auto-discovery; see **reference.md** for `forceBrowser` and fallback behavior.
 
 **Compose + Mongo:** use `-f docker-compose.yml -f docker-compose.mongo.yml` and set `DATABASE_DRIVER`, `MONGO_URI`, `ENABLE_AUTH`, `JWT_SECRET` in `.env`.
 

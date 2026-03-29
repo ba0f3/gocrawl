@@ -16,7 +16,7 @@ This file orients automated coding agents and contributors to the **gocrawl** re
 | `cmd/main.go` | Wiring: config, DB init, middleware, route registration. |
 | `internal/api/` | HTTP handlers, crawl manager, middleware (auth, CORS, logging). |
 | `internal/config/` | `config.Load()` and env-backed structs (server, database, security, crawler, retention, rate limits, SSE). |
-| `internal/crawler/` | Colly-based crawl/scrape execution. |
+| `internal/crawler/` | Colly-based crawl/scrape execution; chromedp remote (Lightpanda) with auto fallback and `forceBrowser` (see `README.md` / `LIGHTPANDA_*`, `CHROMEDP_*`). |
 | `internal/extractor/` | HTML → Markdown and related extraction. |
 | `internal/db/` | `Store` interface; Mongo and GORM (Postgres/SQLite) implementations, indexes, cleanup routine. |
 | `internal/user/` | Registration, login, API keys. |
