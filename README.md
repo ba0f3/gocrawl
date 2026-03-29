@@ -119,9 +119,11 @@ export BASE_URL="http://localhost:8080"
 
 | Field | JSON | Description |
 |-------|------|-------------|
+| Output shapes | `formats` | Array: `"markdown"`, `"html"`, `"rawHtml"`. Only requested fields are filled; others are omitted from JSON (`omitempty`). **If `formats` is omitted or empty**, all three are returned (backward compatible). Example: `["markdown"]` returns only `markdown` (plus `metadata`, `links`). |
+| Main vs full page | `onlyMainContent` | **Omitted** or `true`: try built-in selectors (`main`, `article`, …) then `body` if none match. **`false`**: use the entire `<body>` (full page). Omitting the field now defaults to main-content mode (previously a JSON quirk made omitted behave like `false`). |
 | Content root | `contentSelector` | One CSS selector for the node whose HTML is converted to markdown / stored as `html`. |
 | Content root | `contentSelectors` | More selectors, tried in order after `contentSelector`. |
-| Links list | `linkSelector` | Which elements provide outbound links (default `a[href]`). Use e.g. `main a[href]` to ignore footer/nav. |
+| Links list | `linkSelector` | Optional. **Omitted:** collect links only inside the same DOM subtree as the extracted content (e.g. only under `<article>` when that block is used for markdown), with **URLs de-duplicated**. **Set:** run this selector against the **full page** (e.g. `a[href]` for every anchor on the page). |
 
 If `contentSelector` or `contentSelectors` are set, they **replace** the built-in main-content list (`main`, `article`, …). If no selector matches, the extractor falls back to `body`. `onlyMainContent` applies only when you do **not** set custom content selectors.
 
@@ -129,8 +131,9 @@ If `contentSelector` or `contentSelectors` are set, they **replace** the built-i
 
 | Field | JSON | Description |
 |-------|------|-------------|
-| Link discovery | `linkSelectors` | Only enqueue links that match these selectors (e.g. `article a[href]`, `.post-list a`). When empty, the crawler uses the default article/main heuristics plus all `a[href]`. |
-| Per page | `scrapeOptions` | Same fields as scrape: `contentSelector`, `contentSelectors`, `linkSelector`, `onlyMainContent`, `formats`, etc., applied to each fetched page. |
+| Link discovery | `linkSelector` | Single CSS selector for the same purpose as `linkSelectors` (convenience). |
+| Link discovery | `linkSelectors` | Only enqueue links that match these selectors (e.g. `article a[href]`, `.post-list a`). When both `linkSelector` and `linkSelectors` are set, `linkSelector` is tried first. When empty, the crawler uses the default article/main heuristics plus all `a[href]`. |
+| Per page | `scrapeOptions` | Same fields as scrape: `contentSelector`, `contentSelectors`, `linkSelector`, `onlyMainContent`, `formats`, etc., applied to each fetched page. If you set `linkSelectors` but omit `scrapeOptions.linkSelector`, the same selectors are reused when collecting `links` on each scraped page (Colly debug logs will show that selector instead of only `a[href]`). |
 
 ## Testing with curl
 

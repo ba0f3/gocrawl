@@ -210,16 +210,24 @@ func (cm *CrawlManager) performCrawling(req *CrawlRequestBody, jobID string) []*
 			return
 		}
 		crawlMu.Unlock()
-		scrapeReq := req.ScrapeOptions
-		if scrapeReq == nil {
-			scrapeReq = &crawler.ScrapeRequest{
-				OnlyMainContent: true,
+		var scrapeOpts crawler.ScrapeRequest
+		if req.ScrapeOptions != nil {
+			scrapeOpts = *req.ScrapeOptions
+		} else {
+			main := true
+			scrapeOpts = crawler.ScrapeRequest{
+				OnlyMainContent: &main,
 				Formats:         []string{"markdown", "html", "rawHtml"},
 			}
 		}
-		scrapeReq.URL = r.Request.URL.String()
+		scrapeOpts.URL = r.Request.URL.String()
+		// Per-page ScrapeURL uses its own Colly collector; inherit crawl linkSelectors for
+		// result.links and debugger logs unless scrapeOptions.linkSelector is set.
+		if crawlSels := effectiveCrawlLinkSelectors(req); len(crawlSels) > 0 && strings.TrimSpace(scrapeOpts.LinkSelector) == "" {
+			scrapeOpts.LinkSelector = strings.Join(crawlSels, ", ")
+		}
 
-		result, err := crawler.ScrapeURL(scrapeReq, cm.cfg)
+		result, err := crawler.ScrapeURL(&scrapeOpts, cm.cfg)
 		if err != nil {
 			log.Printf("Error scraping page %s: %v", r.Request.URL, err)
 			return
@@ -260,6 +268,9 @@ func effectiveCrawlLinkSelectors(req *CrawlRequestBody) []string {
 		return nil
 	}
 	var out []string
+	if s := strings.TrimSpace(req.LinkSelector); s != "" {
+		out = append(out, s)
+	}
 	for _, s := range req.LinkSelectors {
 		s = strings.TrimSpace(s)
 		if s != "" {

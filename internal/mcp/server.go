@@ -37,7 +37,7 @@ type CrawlJob struct {
 // ScrapeArgs represents the arguments for the scrape tool
 type ScrapeArgs struct {
 	URL             string   `json:"url" mcp:"URL to scrape"`
-	OnlyMainContent bool     `json:"onlyMainContent" mcp:"Extract only main content"`
+	OnlyMainContent *bool    `json:"onlyMainContent,omitempty" mcp:"Extract only main content (omit for default)"`
 	Formats         []string `json:"formats" mcp:"Output formats (markdown, html, rawHtml)"`
 	Timeout         int      `json:"timeout" mcp:"Timeout in seconds"`
 }

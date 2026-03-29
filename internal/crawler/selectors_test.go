@@ -4,6 +4,20 @@ import (
 	"testing"
 )
 
+func TestEffectiveOnlyMainContent(t *testing.T) {
+	if !EffectiveOnlyMainContent(&ScrapeRequest{}) {
+		t.Fatal("nil pointer should mean main content on")
+	}
+	f := false
+	if EffectiveOnlyMainContent(&ScrapeRequest{OnlyMainContent: &f}) {
+		t.Fatal("explicit false should be full body")
+	}
+	tr := true
+	if !EffectiveOnlyMainContent(&ScrapeRequest{OnlyMainContent: &tr}) {
+		t.Fatal("explicit true")
+	}
+}
+
 func TestUserContentSelectors(t *testing.T) {
 	req := &ScrapeRequest{
 		ContentSelector:  " #main ",

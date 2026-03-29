@@ -35,6 +35,15 @@ func EffectiveContentSelectors(req *ScrapeRequest) []string {
 	return MainContentSelectors()
 }
 
+// EffectiveOnlyMainContent is true when onlyMainContent is omitted (nil) or explicitly true.
+// Explicit false means return the full document body as HTML/markdown (legacy full-page scrape).
+func EffectiveOnlyMainContent(req *ScrapeRequest) bool {
+	if req == nil || req.OnlyMainContent == nil {
+		return true
+	}
+	return *req.OnlyMainContent
+}
+
 // EffectiveLinkSelector returns the selector used to discover links on a scrape (default a[href]).
 func EffectiveLinkSelector(req *ScrapeRequest) string {
 	if req == nil {

@@ -17,17 +17,18 @@ import (
 
 // ScrapeResult holds the result of a scrape
 type ScrapeResult struct {
-	Markdown string            `json:"markdown"`
-	HTML     string            `json:"html"`
-	RawHTML  string            `json:"rawHtml"`
-	Links    []string          `json:"links"`
+	Markdown string            `json:"markdown,omitempty"`
+	HTML     string            `json:"html,omitempty"`
+	RawHTML  string            `json:"rawHtml,omitempty"`
+	Links    []string          `json:"links,omitempty"`
 	Metadata map[string]string `json:"metadata"`
 }
 
 // ScrapeRequest represents a scrape request
 type ScrapeRequest struct {
-	URL                string   `json:"url"`
-	OnlyMainContent    bool     `json:"onlyMainContent"`
+	URL string `json:"url"`
+	// OnlyMainContent: omit or true = use main/article heuristics; false = full <body> (see EffectiveOnlyMainContent).
+	OnlyMainContent    *bool    `json:"onlyMainContent,omitempty"`
 	IncludeTags        []string `json:"includeTags"`
 	ExcludeTags        []string `json:"excludeTags"`
 	Timeout            int      `json:"timeout"`
@@ -41,6 +42,15 @@ type ScrapeRequest struct {
 }
 
 const minMainMarkdownRunes = 80
+
+// wantsFormat reports whether the client asked for this output.
+// If formats is empty, all of markdown/html/rawHtml are included (legacy behavior).
+func wantsFormat(req *ScrapeRequest, format string) bool {
+	if req == nil || len(req.Formats) == 0 {
+		return true
+	}
+	return contains(req.Formats, format)
+}
 
 func scrapeNeedsChromedpFallback(result *ScrapeResult, visitErr error, onlyMain bool) bool {
 	if visitErr != nil {
@@ -59,7 +69,7 @@ func scrapeNeedsChromedpFallback(result *ScrapeResult, visitErr error, onlyMain 
 }
 
 func finalizeScrape(req *ScrapeRequest, cfg *config.Config, timeout time.Duration, result *ScrapeResult, visitErr error) (*ScrapeResult, error) {
-	if cfg != nil && cfg.Crawler.ChromedpWSURL != "" && scrapeNeedsChromedpFallback(result, visitErr, req.OnlyMainContent) {
+	if cfg != nil && cfg.Crawler.ChromedpWSURL != "" && scrapeNeedsChromedpFallback(result, visitErr, EffectiveOnlyMainContent(req)) {
 		html, err := ScrapeHTMLViaChromedp(cfg, req, timeout)
 		if err == nil {
 			r := buildResultFromMainHTML(html, req)
@@ -78,29 +88,100 @@ func buildResultFromMainHTML(contentHTML string, req *ScrapeRequest) *ScrapeResu
 		Links:    []string{},
 		Metadata: map[string]string{"sourceURL": req.URL},
 	}
-	result.HTML = contentHTML
-	result.RawHTML = contentHTML
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader("<div id=\"root\">" + contentHTML + "</div>"))
 	if err == nil {
-		doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
-			href, _ := s.Attr("href")
-			if href == "" {
-				return
-			}
-			baseURL, _ := url.Parse(req.URL)
-			linkURL, err := url.Parse(href)
-			if err == nil {
-				result.Links = append(result.Links, baseURL.ResolveReference(linkURL).String())
-			}
-		})
+		root := doc.Find("#root").First()
+		seen := make(map[string]struct{})
+		if linkSelExplicit(req) {
+			doc.Find(strings.TrimSpace(req.LinkSelector)).Each(func(_ int, s *goquery.Selection) {
+				appendResolvedHref(s, req.URL, &result.Links, seen)
+			})
+		} else {
+			root.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
+				appendResolvedHref(s, req.URL, &result.Links, seen)
+			})
+		}
 	}
-	if contains(req.Formats, "markdown") {
+	if wantsFormat(req, "markdown") {
 		md, err := extractor.ToMarkdown(contentHTML)
 		if err == nil {
 			result.Markdown = md
 		}
 	}
+	if wantsFormat(req, "html") {
+		result.HTML = contentHTML
+	}
+	if wantsFormat(req, "rawHtml") {
+		result.RawHTML = contentHTML
+	}
 	return result
+}
+
+// linkSelExplicit is true when the client set linkSelector (full-document link query).
+func linkSelExplicit(req *ScrapeRequest) bool {
+	return req != nil && strings.TrimSpace(req.LinkSelector) != ""
+}
+
+// pickContentHTML returns extracted HTML and the goquery subtree used (for scoped links).
+func pickContentHTML(e *colly.HTMLElement, req *ScrapeRequest) (contentHTML string, scope *goquery.Selection) {
+	body := e.DOM.Find("body").First()
+	if len(UserContentSelectors(req)) > 0 {
+		for _, selector := range UserContentSelectors(req) {
+			mainContent := e.DOM.Find(selector).First()
+			if mainContent.Length() > 0 {
+				contentHTML, _ = mainContent.Html()
+				return contentHTML, mainContent
+			}
+		}
+		contentHTML, _ = body.Html()
+		return contentHTML, body
+	}
+	if EffectiveOnlyMainContent(req) {
+		for _, selector := range MainContentSelectors() {
+			mainContent := e.DOM.Find(selector).First()
+			if mainContent.Length() > 0 {
+				contentHTML, _ = mainContent.Html()
+				return contentHTML, mainContent
+			}
+		}
+		contentHTML, _ = body.Html()
+		return contentHTML, body
+	}
+	contentHTML, _ = body.Html()
+	return contentHTML, body
+}
+
+func appendResolvedHref(s *goquery.Selection, pageURL string, links *[]string, seen map[string]struct{}) {
+	href, _ := s.Attr("href")
+	if href == "" {
+		return
+	}
+	baseURL, _ := url.Parse(pageURL)
+	linkURL, err := url.Parse(href)
+	if err != nil {
+		return
+	}
+	abs := baseURL.ResolveReference(linkURL).String()
+	if _, ok := seen[abs]; ok {
+		return
+	}
+	seen[abs] = struct{}{}
+	*links = append(*links, abs)
+}
+
+func collectScrapeLinks(e *colly.HTMLElement, req *ScrapeRequest, scope *goquery.Selection, links *[]string) {
+	seen := make(map[string]struct{})
+	if linkSelExplicit(req) {
+		e.DOM.Find(strings.TrimSpace(req.LinkSelector)).Each(func(_ int, s *goquery.Selection) {
+			appendResolvedHref(s, req.URL, links, seen)
+		})
+		return
+	}
+	if scope != nil && scope.Length() > 0 {
+		scope.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
+			appendResolvedHref(s, req.URL, links, seen)
+		})
+	}
 }
 
 // ScrapeURL scrapes a specific URL and extracts the main content
@@ -142,37 +223,19 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 	}
 
 	c.OnHTML("html", func(e *colly.HTMLElement) {
-		rawHTML, _ := e.DOM.Html()
-		result.RawHTML = rawHTML
-
-		var contentHTML string
-		if userSel := UserContentSelectors(req); len(userSel) > 0 {
-			for _, selector := range userSel {
-				if mainContent := e.DOM.Find(selector).First(); mainContent.Length() > 0 {
-					contentHTML, _ = mainContent.Html()
-					break
-				}
-			}
-			if contentHTML == "" {
-				contentHTML, _ = e.DOM.Find("body").Html()
-			}
-		} else if req.OnlyMainContent {
-			for _, selector := range MainContentSelectors() {
-				if mainContent := e.DOM.Find(selector).First(); mainContent.Length() > 0 {
-					contentHTML, _ = mainContent.Html()
-					break
-				}
-			}
-			if contentHTML == "" {
-				contentHTML, _ = e.DOM.Find("body").Html()
-			}
-		} else {
-			contentHTML, _ = e.DOM.Find("body").Html()
+		if wantsFormat(req, "rawHtml") {
+			rawHTML, _ := e.DOM.Html()
+			result.RawHTML = rawHTML
 		}
 
-		result.HTML = contentHTML
+		contentHTML, scope := pickContentHTML(e, req)
+		if wantsFormat(req, "html") {
+			result.HTML = contentHTML
+		}
 
-		if contains(req.Formats, "markdown") {
+		collectScrapeLinks(e, req, scope, &result.Links)
+
+		if wantsFormat(req, "markdown") {
 			markdown, err := extractor.ToMarkdown(contentHTML)
 			if err == nil {
 				result.Markdown = markdown
@@ -183,19 +246,6 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 		result.Metadata["description"] = e.DOM.Find("meta[name='description']").AttrOr("content", "")
 		result.Metadata["language"] = e.DOM.Find("html").AttrOr("lang", "")
 		result.Metadata["sourceURL"] = req.URL
-	})
-
-	linkSel := EffectiveLinkSelector(req)
-	c.OnHTML(linkSel, func(e *colly.HTMLElement) {
-		href := e.Attr("href")
-		if href != "" {
-			baseURL, _ := url.Parse(req.URL)
-			linkURL, err := url.Parse(href)
-			if err == nil {
-				absoluteURL := baseURL.ResolveReference(linkURL)
-				result.Links = append(result.Links, absoluteURL.String())
-			}
-		}
 	})
 
 	c.OnResponse(func(r *colly.Response) {
