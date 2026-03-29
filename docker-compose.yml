@@ -1,8 +1,8 @@
 services:
   gocrawl:
-    build: .
+    image: ghcr.io/ba0f3/gocrawl:latest
     ports:
-      - "8151:8151"
+      - "8151:8151"    
     env_file:
       - path: .env
         required: false

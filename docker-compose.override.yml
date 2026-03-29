@@ -1,3 +1,5 @@
 services:
+  gocrawl:
+    build: .
   lightpanda:
     network_mode: host
