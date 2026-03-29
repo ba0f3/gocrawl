@@ -4,222 +4,267 @@ A production-grade Go web crawler that provides a Firecrawl-compatible API for w
 
 ## Features
 
-- 🔄 Web crawling using Colly
-- 📝 HTML to Markdown conversion
-- 🗄️ MongoDB for data persistence
-- 🔐 User authentication with API keys (optional)
-- 🚀 RESTful API compatible with Firecrawl
-- 🧹 Automatic data cleanup
-- 📊 Progress tracking for crawl jobs
+- Web crawling using Colly (queued jobs, configurable workers)
+- HTML to Markdown conversion
+- Multiple backends: MongoDB or SQL (PostgreSQL / SQLite via GORM)
+- Optional user authentication with API keys
+- REST API under `/v1` (Firecrawl-style)
+- Optional HTTP rate limiting, crawl retries, and chromedp/Lightpanda fallback for JS-heavy pages
+- Automatic data cleanup and crawl job progress tracking
 
 ## Prerequisites
 
-- Go 1.19 or higher
-- MongoDB (local or remote)
+- Go 1.26 or higher (see `go.mod`)
+- When `ENABLE_AUTH=true`: a database (MongoDB, PostgreSQL, or SQLite) per configuration
 
 ## Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd gocrawl
 ```
 
 2. Install dependencies:
+
 ```bash
 go mod tidy
 ```
 
 3. Set up environment variables by copying `.env` and modifying as needed:
+
 ```bash
 cp .env .env.local
 ```
 
-4. Start MongoDB (if running locally):
+4. Run the application:
+
 ```bash
-mongod
+go run ./cmd
 ```
 
-5. Run the application:
+Or use the Makefile:
+
 ```bash
-go run ./cmd/main.go
+make run      # development
+make build    # produces ./bin/gocrawl
 ```
 
 ## Configuration
 
-Environment variables can be set in the `.env` file or as system environment variables:
+Environment variables can be set in the `.env` file or as system environment variables.
 
-### Server Configuration
-- `PORT`: Server port (default: 8080)
-- `HOST`: Server host (default: localhost)
+### Server
 
-### Database Configuration
-- `MONGO_URI`: MongoDB connection URI (default: mongodb://localhost:27017)
-- `DB_NAME`: Database name (default: gocrawl)
+| Variable | Description |
+|----------|-------------|
+| `PORT` | Server port (default: `8080`) |
+| `HOST` | Bind address (default: empty; use `0.0.0.0` to listen on all interfaces) |
+
+### Database
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_DRIVER` | `mongo` (default), `postgres`, or `sqlite` |
+| `MONGO_URI` | MongoDB URI (default: `mongodb://localhost:27017`) |
+| `DB_NAME` | Database name (default: `gocrawl`) |
+| `DATABASE_DSN` | Postgres connection string or SQLite file path |
+| `SQLITE_PATH` | Alternative SQLite path if `DATABASE_DSN` is empty |
 
 ### Security
-- `JWT_SECRET`: Secret for JWT tokens
-- `ENABLE_AUTH`: Set to `true` to disable authentication (default: false)
 
-### Crawler Configuration
-- `MAX_CONCURRENT_CRAWLS`: Maximum concurrent crawl operations (default: 10)
-- `CRAWL_TIMEOUT`: Timeout for crawl operations (default: 30s)
-- `USER_AGENT`: User agent string (default: GoCrawl/1.0)
+| Variable | Description |
+|----------|-------------|
+| `JWT_SECRET` | Secret for JWT-related use |
+| `ENABLE_AUTH` | `true` to require API keys on protected routes and to use a real database; `false` runs without `Authorization` and uses an **in-memory** crawl job store (jobs are lost on restart; register/login stay unavailable) |
 
-### Data Retention
-- `DATA_RETENTION_DAYS`: Days to keep crawl data (default: 30)
-- `CLEANUP_INTERVAL`: Cleanup interval (default: 24h)
+### Crawler (selected)
 
-## API Endpoints
+| Variable | Description |
+|----------|-------------|
+| `CRAWL_WORKERS` | Goroutines that drain the crawl job queue (default: same as `MAX_CONCURRENT_CRAWLS`) |
+| `MAX_CONCURRENT_CRAWLS` | Default per-job Colly parallelism (default: `10`) |
+| `CRAWL_MAX_RETRIES` | HTTP retries for 429/5xx (default: `3`) |
+| `LIGHTPANDA_WS_URL` | Optional CDP WebSocket URL for JS fallback scraping |
+| `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW` | If both set (e.g. `100` and `1m`), enables per-client rate limiting on `/v1` |
 
-### Authentication (if enabled)
+### Data retention
 
-#### Register User
+- `DATA_RETENTION_DAYS`, `CLEANUP_INTERVAL` — see `internal/config/config.go` for defaults.
+
+## API base URL
+
+All HTTP APIs are mounted at **`/v1`** (not `/api/v1`).
+
+Example base:
+
 ```bash
-POST /api/v1/auth/register
-Content-Type: application/json
-
-{
-  "username": "your_username",
-  "password": "your_password"
-}
+export BASE_URL="http://localhost:8080"
 ```
 
-#### Login
-```bash
-POST /api/v1/auth/login
-Content-Type: application/json
+## API overview
 
-{
-  "username": "your_username",
-  "password": "your_password"
-}
+| Method | Path | Auth (if enabled) | Description |
+|--------|------|---------------------|-------------|
+| POST | `/v1/auth/register` | No | Create user (requires DB) |
+| POST | `/v1/auth/login` | No | Login; response includes `apiKey` |
+| POST | `/v1/scrape` | Bearer API key | Single-page scrape |
+| POST | `/v1/crawl` | Bearer API key | Enqueue multi-page crawl |
+| GET | `/v1/crawl/{id}` | Bearer API key | Job status and results |
+
+## Testing with curl
+
+The examples below use `$BASE_URL` (default `http://localhost:8080`). With authentication enabled, set `API_KEY` after login.
+
+### 1. Scrape a single page (auth disabled)
+
+When `ENABLE_AUTH=false`, omit `Authorization`:
+
+```bash
+curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/scrape" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "onlyMainContent": true,
+    "formats": ["markdown", "html"]
+  }' | jq .
 ```
 
-### Scraping
+### 2. Register and log in (auth enabled)
 
-#### Scrape Single Page
+Requires MongoDB or SQL configured and `ENABLE_AUTH=true`.
+
 ```bash
-POST /api/v1/scrape
-Content-Type: application/json
-Authorization: Bearer <api_key>  # Only if auth is enabled
+curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo","password":"demo-secret"}' | jq .
 
-{
-  "url": "https://example.com",
-  "onlyMainContent": true,
-  "formats": ["markdown"],
-  "timeout": 30
-}
+curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo","password":"demo-secret"}' | jq .
 ```
 
-Response:
+Save the API key from the login response:
+
+```bash
+export API_KEY="$(curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo","password":"demo-secret"}' | jq -r .data.apiKey)"
+echo "$API_KEY"
+```
+
+### 3. Scrape with API key
+
+```bash
+curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/scrape" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  -d '{
+    "url": "https://hehemetal.com",
+    "onlyMainContent": true,
+    "formats": ["markdown"]
+  }' | jq .
+```
+
+Successful responses use the wrapper: `{"success":true,"data":{...}}` (or `success:false` with `error`).
+
+### 4. Start a crawl job
+
+Returns `id` immediately; workers process the queue in the background.
+
+```bash
+curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/crawl" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  -d '{
+    "url": "https://hehemetal.com",
+    "limit": 5,
+    "maxDepth": 1,
+    "maxConcurrency": 2,
+    "delay": 500
+  }' | jq .
+```
+
+Example response shape:
+
+```json
+{"success":true,"id":"<uuid>","url":"https://hehemetal.com"}
+```
+
+### 5. Poll crawl status and results
+
+Use the **`id` from the crawl POST response** (not another UUID). A wrong or expired id returns HTTP 404.
+
+```bash
+JOB_ID="<paste-id-from-crawl-response>"
+
+curl -sS "${BASE_URL:-http://localhost:8080}/v1/crawl/${JOB_ID}" \
+  -H "Authorization: Bearer ${API_KEY}" | jq .
+```
+
+Response includes `status` (`queued`, `crawling`, `completed`, …), `total`, `completed`, and `data` (array of page results).
+
+### 6. Quick one-liner (auth off)
+
+```bash
+curl -sS -X POST "http://localhost:8080/v1/scrape" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com","onlyMainContent":true,"formats":["markdown"]}'
+```
+
+## Response shapes (reference)
+
+**Scrape** (`writeResponse`):
+
 ```json
 {
   "success": true,
   "data": {
-    "markdown": "# Title\nContent here...",
-    "html": "<h1>Title</h1><p>Content here...</p>",
-    "rawHtml": "<!DOCTYPE html>...",
-    "links": ["https://example.com/link1"],
-    "metadata": {
-      "title": "Page Title",
-      "description": "Page description",
-      "sourceURL": "https://example.com"
-    }
+    "markdown": "...",
+    "html": "...",
+    "rawHtml": "...",
+    "links": ["https://example.com/..."],
+    "metadata": { "title": "...", "sourceURL": "..." }
   }
 }
 ```
 
-#### Start Crawl Job
-```bash
-POST /api/v1/crawl
-Content-Type: application/json
-Authorization: Bearer <api_key>  # Only if auth is enabled
+**Start crawl** (raw JSON, not wrapped):
 
-# (Not yet implemented)
+```json
+{ "success": true, "id": "<job-uuid>", "url": "https://example.com" }
 ```
 
-#### Get Crawl Status
-```bash
-GET /api/v1/crawl/{id}
-Authorization: Bearer <api_key>  # Only if auth is enabled
+**Crawl status** (raw JSON):
 
-# (Not yet implemented)
+```json
+{
+  "status": "completed",
+  "total": 3,
+  "completed": 3,
+  "creditsUsed": 0,
+  "expiresAt": "2026-03-30T12:00:00Z",
+  "data": [ { "markdown": "...", "metadata": { } } ]
+}
 ```
 
-## Usage Examples
-
-### With Authentication Disabled
-
-Set `ENABLE_AUTH=true` in your `.env` file:
-
-```bash
-curl -X POST http://localhost:8080/api/v1/scrape \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://example.com",
-    "onlyMainContent": true,
-    "formats": ["markdown"]
-  }'
-```
-
-### With Authentication Enabled
-
-1. Register a user:
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "password": "testpass"
-  }'
-```
-
-2. Login to get API key:
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "password": "testpass"
-  }'
-```
-
-3. Use the API key for scraping:
-```bash
-curl -X POST http://localhost:8080/api/v1/scrape \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your-api-key>" \
-  -d '{
-    "url": "https://example.com",
-    "onlyMainContent": true,
-    "formats": ["markdown"]
-  }'
-```
-
-## Project Structure
+## Project structure (abbreviated)
 
 ```
 gocrawl/
-├── cmd/
-│   └── main.go                   # Application entry point
+├── cmd/main.go              # Entrypoint, routes, DB wiring
 ├── internal/
+│   ├── api/                 # HTTP handlers, crawl manager, middleware
 │   ├── config/
-│   │   └── config.go             # Configuration management
-│   ├── crawler/
-│   │   └── colly.go              # Web crawling logic
-│   ├── extractor/
-│   │   └── markdown.go           # HTML to Markdown conversion
-│   ├── api/
-│   │   ├── routes.go             # HTTP API handlers
-│   │   └── middleware.go         # Authentication & CORS middleware
+│   ├── crawler/             # Colly scrape, retries, chromedp fallback
+│   ├── extractor/           # HTML → Markdown
+│   ├── db/                  # Store interface, Mongo + GORM SQL
 │   ├── user/
-│   │   └── user.go               # User management
-│   └── db/
-│       └── db.go                 # MongoDB operations
-├── .env                          # Environment configuration
-├── go.mod                        # Go module file
-└── README.md                     # This file
+│   └── mcp/
+├── Makefile                 # build, test, run, fmt, vet
+├── go.mod
+└── README.md
 ```
 
 ## Contributing
@@ -227,7 +272,7 @@ gocrawl/
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
+4. Run `make all` (or `make fmt vet test build`)
 5. Submit a pull request
 
 ## License

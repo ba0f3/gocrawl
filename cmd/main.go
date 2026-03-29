@@ -47,8 +47,8 @@ func main() {
 
 		store.StartCleanupRoutine(cfg.Retention)
 	} else {
-		log.Println("Authentication disabled - running without database")
-		store = db.NilStore{}
+		log.Println("Authentication disabled - using in-memory crawl job store (register/login unavailable)")
+		store = db.NewMemoryStore()
 	}
 
 	handler := api.NewHandler(store, cfg)
