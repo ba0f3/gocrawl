@@ -93,7 +93,7 @@ func (s *MCPServer) registerTools() {
 // handleScrape handles the scrape tool
 func (s *MCPServer) handleScrape(ctx context.Context, _ *mcp.CallToolRequest, args ScrapeArgs) (*mcp.CallToolResult, any, error) {
 	// Convert parameters to CrawlRequest
-	req := &crawler.CrawlRequest{
+	req := &crawler.ScrapeRequest{
 		URL:             args.URL,
 		OnlyMainContent: args.OnlyMainContent,
 		Formats:         args.Formats,
@@ -109,7 +109,7 @@ func (s *MCPServer) handleScrape(ctx context.Context, _ *mcp.CallToolRequest, ar
 	}
 
 	// Perform the scrape
-	result, err := crawler.CrawlURL(req, s.cfg)
+	result, err := crawler.ScrapeURL(req, s.cfg)
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{

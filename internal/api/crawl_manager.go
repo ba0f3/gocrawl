@@ -40,7 +40,7 @@ func (cm *CrawlManager) StartCrawl(jobID string, req *CrawlRequestBody) {
 	cm.updateCrawlStatus(jobID, "crawling", 0)
 
 	// Perform multi-page crawl
-	results := cm.performMultiPageCrawl(req, jobID)
+	results := cm.performCrawling(req, jobID)
 
 	// Update total count
 	cm.updateCrawlTotal(jobID, len(results))
@@ -96,9 +96,9 @@ func (cm *CrawlManager) updateCrawlTotal(jobID string, total int) {
 	}
 }
 
-// performMultiPageCrawl performs a multi-page crawl based on the request
-func (cm *CrawlManager) performMultiPageCrawl(req *CrawlRequestBody, jobID string) []*crawler.CrawlResult {
-	results := make([]*crawler.CrawlResult, 0)
+// performCrawling performs a multi-page scrape based on the request
+func (cm *CrawlManager) performCrawling(req *CrawlRequestBody, jobID string) []*crawler.ScrapeResult {
+	results := make([]*crawler.ScrapeResult, 0)
 	visited := make(map[string]bool)
 	completedCount := 0
 
@@ -131,9 +131,9 @@ func (cm *CrawlManager) performMultiPageCrawl(req *CrawlRequestBody, jobID strin
 	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
 		link := e.Attr("href")
 		absURL := e.Request.AbsoluteURL(link)
-		
+
 		// Apply filters
-		if cm.shouldCrawlURL(absURL, baseURL, req) && !visited[absURL] {
+		if cm.shouldScrapeURL(absURL, baseURL, req) && !visited[absURL] {
 			visited[absURL] = true
 			if len(visited) <= req.Limit {
 				e.Request.Visit(absURL)
@@ -147,20 +147,20 @@ func (cm *CrawlManager) performMultiPageCrawl(req *CrawlRequestBody, jobID strin
 			return
 		}
 
-		// Create crawl request for this page
+		// Create scrape request for this page
 		scrapeReq := req.ScrapeOptions
 		if scrapeReq == nil {
-			scrapeReq = &crawler.CrawlRequest{
+			scrapeReq = &crawler.ScrapeRequest{
 				OnlyMainContent: true,
 				Formats:         []string{"markdown", "html", "rawHtml"},
 			}
 		}
 		scrapeReq.URL = r.Request.URL.String()
 
-		// Crawl the page
-		result, err := crawler.CrawlURL(scrapeReq, cm.cfg)
+		// Scrape the page
+		result, err := crawler.ScrapeURL(scrapeReq, cm.cfg)
 		if err != nil {
-			log.Printf("Error crawling page %s: %v", r.Request.URL, err)
+			log.Printf("Error scraping page %s: %v", r.Request.URL, err)
 			return
 		}
 
@@ -173,15 +173,15 @@ func (cm *CrawlManager) performMultiPageCrawl(req *CrawlRequestBody, jobID strin
 		}
 	})
 
-	// Start crawling
+	// Start scraping
 	c.Visit(req.URL)
 	c.Wait()
 
 	return results
 }
 
-// shouldCrawlURL determines if a URL should be crawled based on filters
-func (cm *CrawlManager) shouldCrawlURL(absURL string, baseURL *url.URL, req *CrawlRequestBody) bool {
+// shouldScrapeURL determines if a URL should be scraped based on filters
+func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, req *CrawlRequestBody) bool {
 	parsedURL, err := url.Parse(absURL)
 	if err != nil {
 		return false
@@ -220,4 +220,3 @@ func (cm *CrawlManager) shouldCrawlURL(absURL string, baseURL *url.URL, req *Cra
 
 	return true
 }
-

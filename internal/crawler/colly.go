@@ -12,8 +12,8 @@ import (
 	"github.com/gocolly/colly/v2/proxy"
 )
 
-// CrawlResult holds the result of a crawl
-type CrawlResult struct {
+// ScrapeResult holds the result of a scrape
+type ScrapeResult struct {
 	Markdown string            `json:"markdown"`
 	HTML     string            `json:"html"`
 	RawHTML  string            `json:"rawHtml"`
@@ -21,8 +21,8 @@ type CrawlResult struct {
 	Metadata map[string]string `json:"metadata"`
 }
 
-// CrawlRequest represents a crawl request
-type CrawlRequest struct {
+// ScrapeRequest represents a scrape request
+type ScrapeRequest struct {
 	URL                string   `json:"url"`
 	OnlyMainContent    bool     `json:"onlyMainContent"`
 	IncludeTags        []string `json:"includeTags"`
@@ -32,8 +32,8 @@ type CrawlRequest struct {
 	RemoveBase64Images bool     `json:"removeBase64Images"`
 }
 
-// CrawlURL crawls a specific URL and extracts the main content
-func CrawlURL(req *CrawlRequest, cfg *config.Config) (*CrawlResult, error) {
+// ScrapeURL scrapes a specific URL and extracts the main content
+func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 	c := colly.NewCollector(
 		colly.Debugger(&debug.LogDebugger{}),
 	)
@@ -59,7 +59,7 @@ func CrawlURL(req *CrawlRequest, cfg *config.Config) (*CrawlResult, error) {
 		c.SetProxyFunc(rps)
 	}
 
-	result := &CrawlResult{
+	result := &ScrapeResult{
 		Links:    []string{},
 		Metadata: make(map[string]string),
 	}

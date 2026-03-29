@@ -106,13 +106,13 @@ func (h *Handler) GenerateAPIKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Scrape(w http.ResponseWriter, r *http.Request) {
-	var req crawler.CrawlRequest
+	var req crawler.ScrapeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeResponse(w, http.StatusBadRequest, nil, err)
 		return
 	}
 
-	result, err := crawler.CrawlURL(&req, h.Cfg)
+	result, err := crawler.ScrapeURL(&req, h.Cfg)
 	if err != nil {
 		writeResponse(w, http.StatusInternalServerError, nil, err)
 		return
@@ -123,22 +123,22 @@ func (h *Handler) Scrape(w http.ResponseWriter, r *http.Request) {
 
 // CrawlRequest represents the request body for /api/v1/crawl
 type CrawlRequestBody struct {
-	URL                string                `json:"url"`
-	ExcludePaths       []string              `json:"excludePaths,omitempty"`
-	IncludePaths       []string              `json:"includePaths,omitempty"`
-	MaxDepth           int                   `json:"maxDepth,omitempty"`
-	MaxDiscoveryDepth  int                   `json:"maxDiscoveryDepth,omitempty"`
-	IgnoreSitemap      bool                  `json:"ignoreSitemap,omitempty"`
-	IgnoreQueryParams  bool                  `json:"ignoreQueryParameters,omitempty"`
-	Limit              int                   `json:"limit,omitempty"`
-	AllowBackwardLinks bool                  `json:"allowBackwardLinks,omitempty"`
-	CrawlEntireDomain  bool                  `json:"crawlEntireDomain,omitempty"`
-	AllowExternalLinks bool                  `json:"allowExternalLinks,omitempty"`
-	AllowSubdomains    bool                  `json:"allowSubdomains,omitempty"`
-	Delay              int                   `json:"delay,omitempty"`
-	MaxConcurrency     int                   `json:"maxConcurrency,omitempty"`
-	ScrapeOptions      *crawler.CrawlRequest `json:"scrapeOptions,omitempty"`
-	ZeroDataRetention  bool                  `json:"zeroDataRetention,omitempty"`
+	URL                string                 `json:"url"`
+	ExcludePaths       []string               `json:"excludePaths,omitempty"`
+	IncludePaths       []string               `json:"includePaths,omitempty"`
+	MaxDepth           int                    `json:"maxDepth,omitempty"`
+	MaxDiscoveryDepth  int                    `json:"maxDiscoveryDepth,omitempty"`
+	IgnoreSitemap      bool                   `json:"ignoreSitemap,omitempty"`
+	IgnoreQueryParams  bool                   `json:"ignoreQueryParameters,omitempty"`
+	Limit              int                    `json:"limit,omitempty"`
+	AllowBackwardLinks bool                   `json:"allowBackwardLinks,omitempty"`
+	CrawlEntireDomain  bool                   `json:"crawlEntireDomain,omitempty"`
+	AllowExternalLinks bool                   `json:"allowExternalLinks,omitempty"`
+	AllowSubdomains    bool                   `json:"allowSubdomains,omitempty"`
+	Delay              int                    `json:"delay,omitempty"`
+	MaxConcurrency     int                    `json:"maxConcurrency,omitempty"`
+	ScrapeOptions      *crawler.ScrapeRequest `json:"scrapeOptions,omitempty"`
+	ZeroDataRetention  bool                   `json:"zeroDataRetention,omitempty"`
 }
 
 // CrawlResponse represents the response for /api/v1/crawl
@@ -216,13 +216,13 @@ func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
 
 // CrawlStatusResponse represents the response for /api/v1/crawl/{id}
 type CrawlStatusResponse struct {
-	Status      string                `json:"status"`
-	Total       int                   `json:"total"`
-	Completed   int                   `json:"completed"`
-	CreditsUsed int                   `json:"creditsUsed"`
-	ExpiresAt   string                `json:"expiresAt"`
-	Next        string                `json:"next,omitempty"`
-	Data        []crawler.CrawlResult `json:"data,omitempty"`
+	Status      string                 `json:"status"`
+	Total       int                    `json:"total"`
+	Completed   int                    `json:"completed"`
+	CreditsUsed int                    `json:"creditsUsed"`
+	ExpiresAt   string                 `json:"expiresAt"`
+	Next        string                 `json:"next,omitempty"`
+	Data        []crawler.ScrapeResult `json:"data,omitempty"`
 }
 
 func (h *Handler) GetCrawlStatus(w http.ResponseWriter, r *http.Request) {
@@ -250,9 +250,9 @@ func (h *Handler) GetCrawlStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert database results to API format
-	apiResults := make([]crawler.CrawlResult, len(results))
+	apiResults := make([]crawler.ScrapeResult, len(results))
 	for i, result := range results {
-		apiResults[i] = crawler.CrawlResult{
+		apiResults[i] = crawler.ScrapeResult{
 			Markdown: result.Markdown,
 			HTML:     result.HTML,
 			RawHTML:  result.RawHTML,
@@ -297,7 +297,7 @@ func (h *Handler) SSEScrape(w http.ResponseWriter, r *http.Request) {
 	defer h.SSEManager.RemoveClient(sseClient.ID)
 
 	go func() {
-		var req crawler.CrawlRequest
+		var req crawler.ScrapeRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			log.Printf("Error decoding request: %v", err)
 			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": err.Error()}}
@@ -313,7 +313,7 @@ func (h *Handler) SSEScrape(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Perform the scrape
-		result, err := crawler.CrawlURL(&req, h.Cfg)
+		result, err := crawler.ScrapeURL(&req, h.Cfg)
 		if err != nil {
 			log.Printf("Error scraping URL: %v", err)
 			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": err.Error()}}
@@ -389,13 +389,13 @@ func (h *Handler) MCPScrape(w http.ResponseWriter, r *http.Request) {
 		h.SSEScrape(w, r)
 		return
 	}
-	var req crawler.CrawlRequest
+	var req crawler.ScrapeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeResponse(w, http.StatusBadRequest, nil, err)
 		return
 	}
 
-	result, err := crawler.CrawlURL(&req, h.Cfg)
+	result, err := crawler.ScrapeURL(&req, h.Cfg)
 	if err != nil {
 		writeResponse(w, http.StatusInternalServerError, nil, err)
 		return
