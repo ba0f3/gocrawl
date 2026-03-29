@@ -113,6 +113,25 @@ export BASE_URL="http://localhost:8080"
 | POST | `/v1/crawl` | Bearer API key | Enqueue multi-page crawl |
 | GET | `/v1/crawl/{id}` | Bearer API key | Job status and results |
 
+## Optional CSS selectors
+
+### Scrape body (`POST /v1/scrape`)
+
+| Field | JSON | Description |
+|-------|------|-------------|
+| Content root | `contentSelector` | One CSS selector for the node whose HTML is converted to markdown / stored as `html`. |
+| Content root | `contentSelectors` | More selectors, tried in order after `contentSelector`. |
+| Links list | `linkSelector` | Which elements provide outbound links (default `a[href]`). Use e.g. `main a[href]` to ignore footer/nav. |
+
+If `contentSelector` or `contentSelectors` are set, they **replace** the built-in main-content list (`main`, `article`, …). If no selector matches, the extractor falls back to `body`. `onlyMainContent` applies only when you do **not** set custom content selectors.
+
+### Crawl body (`POST /v1/crawl`)
+
+| Field | JSON | Description |
+|-------|------|-------------|
+| Link discovery | `linkSelectors` | Only enqueue links that match these selectors (e.g. `article a[href]`, `.post-list a`). When empty, the crawler uses the default article/main heuristics plus all `a[href]`. |
+| Per page | `scrapeOptions` | Same fields as scrape: `contentSelector`, `contentSelectors`, `linkSelector`, `onlyMainContent`, `formats`, etc., applied to each fetched page. |
+
 ## Testing with curl
 
 The examples below use `$BASE_URL` (default `http://localhost:8080`). With authentication enabled, set `API_KEY` after login.
@@ -211,6 +230,37 @@ Response includes `status` (`queued`, `crawling`, `completed`, …), `total`, `c
 curl -sS -X POST "http://localhost:8080/v1/scrape" \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com","onlyMainContent":true,"formats":["markdown"]}'
+```
+
+### 7. Scrape with custom selectors
+
+```bash
+curl -sS -X POST "http://localhost:8080/v1/scrape" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/article",
+    "contentSelector": "article",
+    "linkSelector": "article a[href]",
+    "formats": ["markdown","html"]
+  }' | jq .
+```
+
+### 8. Crawl with restricted link discovery
+
+```bash
+curl -sS -X POST "http://localhost:8080/v1/crawl" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/blog",
+    "limit": 20,
+    "maxDepth": 2,
+    "linkSelectors": ["article a[href]", ".pagination a[href]"],
+    "scrapeOptions": {
+      "onlyMainContent": true,
+      "contentSelector": "article",
+      "formats": ["markdown"]
+    }
+  }' | jq .
 ```
 
 ## Response shapes (reference)

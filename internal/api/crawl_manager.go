@@ -186,16 +186,22 @@ func (cm *CrawlManager) performCrawling(req *CrawlRequestBody, jobID string) []*
 		c.AllowedDomains = append(c.AllowedDomains, baseURL.Host)
 	}
 
-	// Prefer links inside article/main-like regions (visited first via earlier OnHTML registration).
-	c.OnHTML("article a[href], main a[href], [role=main] a[href], .post a[href], .entry-content a[href]", func(e *colly.HTMLElement) {
-		cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
-	})
-	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
-		if linkInArticleOrMain(e) {
-			return
-		}
-		cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
-	})
+	if crawlLinkSelectors := effectiveCrawlLinkSelectors(req); len(crawlLinkSelectors) > 0 {
+		sel := strings.Join(crawlLinkSelectors, ", ")
+		c.OnHTML(sel, func(e *colly.HTMLElement) {
+			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
+		})
+	} else {
+		c.OnHTML("article a[href], main a[href], [role=main] a[href], .post a[href], .entry-content a[href]", func(e *colly.HTMLElement) {
+			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
+		})
+		c.OnHTML("a[href]", func(e *colly.HTMLElement) {
+			if linkInArticleOrMain(e) {
+				return
+			}
+			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
+		})
+	}
 
 	c.OnScraped(func(r *colly.Response) {
 		crawlMu.Lock()
@@ -247,6 +253,20 @@ func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, r
 		}
 	}
 	mu.Unlock()
+}
+
+func effectiveCrawlLinkSelectors(req *CrawlRequestBody) []string {
+	if req == nil {
+		return nil
+	}
+	var out []string
+	for _, s := range req.LinkSelectors {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, req *CrawlRequestBody) bool {

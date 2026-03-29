@@ -142,7 +142,9 @@ type CrawlRequestBody struct {
 	Delay              int                    `json:"delay,omitempty"`
 	MaxConcurrency     int                    `json:"maxConcurrency,omitempty"`
 	ScrapeOptions      *crawler.ScrapeRequest `json:"scrapeOptions,omitempty"`
-	ZeroDataRetention  bool                   `json:"zeroDataRetention,omitempty"`
+	// LinkSelectors restricts which elements are used to discover outbound links (CSS, must match anchors). Empty uses built-in article/main + all links heuristics.
+	LinkSelectors     []string `json:"linkSelectors,omitempty"`
+	ZeroDataRetention bool     `json:"zeroDataRetention,omitempty"`
 }
 
 // CrawlResponse represents the response for /api/v1/crawl

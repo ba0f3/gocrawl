@@ -33,6 +33,11 @@ type ScrapeRequest struct {
 	Timeout            int      `json:"timeout"`
 	Formats            []string `json:"formats"`
 	RemoveBase64Images bool     `json:"removeBase64Images"`
+	// ContentSelector / ContentSelectors restrict which nodes become HTML/markdown (tried in order). When set, they override OnlyMainContent defaults.
+	ContentSelector  string   `json:"contentSelector,omitempty"`
+	ContentSelectors []string `json:"contentSelectors,omitempty"`
+	// LinkSelector limits which anchors are collected as links (default "a[href]").
+	LinkSelector string `json:"linkSelector,omitempty"`
 }
 
 const minMainMarkdownRunes = 80
@@ -55,7 +60,7 @@ func scrapeNeedsChromedpFallback(result *ScrapeResult, visitErr error, onlyMain 
 
 func finalizeScrape(req *ScrapeRequest, cfg *config.Config, timeout time.Duration, result *ScrapeResult, visitErr error) (*ScrapeResult, error) {
 	if cfg != nil && cfg.Crawler.ChromedpWSURL != "" && scrapeNeedsChromedpFallback(result, visitErr, req.OnlyMainContent) {
-		html, err := ScrapeHTMLViaChromedp(cfg, req.URL, timeout)
+		html, err := ScrapeHTMLViaChromedp(cfg, req, timeout)
 		if err == nil {
 			r := buildResultFromMainHTML(html, req)
 			r.Metadata["extractor"] = "chromedp"
@@ -141,7 +146,17 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 		result.RawHTML = rawHTML
 
 		var contentHTML string
-		if req.OnlyMainContent {
+		if userSel := UserContentSelectors(req); len(userSel) > 0 {
+			for _, selector := range userSel {
+				if mainContent := e.DOM.Find(selector).First(); mainContent.Length() > 0 {
+					contentHTML, _ = mainContent.Html()
+					break
+				}
+			}
+			if contentHTML == "" {
+				contentHTML, _ = e.DOM.Find("body").Html()
+			}
+		} else if req.OnlyMainContent {
 			for _, selector := range MainContentSelectors() {
 				if mainContent := e.DOM.Find(selector).First(); mainContent.Length() > 0 {
 					contentHTML, _ = mainContent.Html()
@@ -170,7 +185,8 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 		result.Metadata["sourceURL"] = req.URL
 	})
 
-	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
+	linkSel := EffectiveLinkSelector(req)
+	c.OnHTML(linkSel, func(e *colly.HTMLElement) {
 		href := e.Attr("href")
 		if href != "" {
 			baseURL, _ := url.Parse(req.URL)
