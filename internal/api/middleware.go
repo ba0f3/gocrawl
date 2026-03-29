@@ -35,11 +35,11 @@ func CORSMiddleware(next http.Handler) http.Handler {
 }
 
 // AuthMiddleware validates API keys
-func AuthMiddleware(database *db.Database, disableAuth bool) func(http.Handler) http.Handler {
+func AuthMiddleware(database *db.Database, enableAuth bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip authentication if disabled
-			if disableAuth {
+			if !enableAuth {
 				next.ServeHTTP(w, r)
 				return
 			}

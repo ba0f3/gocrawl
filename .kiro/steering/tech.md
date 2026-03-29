@@ -62,7 +62,7 @@ docker-compose down
 ### Configuration
 - Environment variables via `.env` file
 - Viper automatically loads from `.env` and system environment
-- Authentication can be disabled with `DISABLE_AUTH=true` for development
+- Authentication can be disabled with `ENABLE_AUTH=true` for development
 
 ## Architecture Patterns
 

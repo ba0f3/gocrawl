@@ -32,7 +32,7 @@ func main() {
 	var database *db.Database
 
 	// Initialize database only if authentication is enabled
-	if !cfg.Security.DisableAuth {
+	if cfg.Security.EnableAuth {
 		var err error
 		database, err = db.Init(cfg.Database.MongoURI, cfg.Database.DBName)
 		if err != nil {
@@ -74,31 +74,23 @@ func main() {
 	if cfg.SSE.Enable {
 		sseRouter := router.PathPrefix("/v1/sse").Subrouter()
 		sseRouter.Use(api.LoggingMiddleware)
-		sseRouter.Use(api.AuthMiddleware(database, cfg.Security.DisableAuth))
+		sseRouter.Use(api.AuthMiddleware(database, cfg.Security.EnableAuth))
 		sseRouter.HandleFunc("", handler.SSE).Methods("GET")
 		log.Println("SSE endpoint enabled at /v1/sse")
 	}
 
 	// MCP tool routes
 	mcpRouter := apiRouter.PathPrefix("/mcp").Subrouter()
-	mcpRouter.Use(api.AuthMiddleware(database, cfg.Security.DisableAuth))
+	mcpRouter.Use(api.AuthMiddleware(database, cfg.Security.EnableAuth))
 	mcpRouter.HandleFunc("/scrape", handler.MCPScrape).Methods("POST")
 	mcpRouter.HandleFunc("/crawl", handler.MCPCrawl).Methods("POST")
 	mcpRouter.HandleFunc("/stats", handler.MCPStats).Methods("GET")
 
-	// Apply authentication middleware only to protected routes if auth is enabled
-	if !cfg.Security.DisableAuth {
-		protectedRouter := apiRouter.PathPrefix("").Subrouter()
-		protectedRouter.Use(api.AuthMiddleware(database, cfg.Security.DisableAuth))
-		protectedRouter.HandleFunc("/scrape", handler.Scrape).Methods("POST")
-		protectedRouter.HandleFunc("/crawl", handler.Crawl).Methods("POST")
-		protectedRouter.HandleFunc("/crawl/{id}", handler.GetCrawlStatus).Methods("GET")
-	} else {
-		// If auth is disabled, add routes without auth middleware
-		apiRouter.HandleFunc("/scrape", handler.Scrape).Methods("POST")
-		apiRouter.HandleFunc("/crawl", handler.Crawl).Methods("POST")
-		apiRouter.HandleFunc("/crawl/{id}", handler.GetCrawlStatus).Methods("GET")
-	}
+	protectedRouter := apiRouter.PathPrefix("").Subrouter()
+	protectedRouter.Use(api.AuthMiddleware(database, cfg.Security.EnableAuth))
+	protectedRouter.HandleFunc("/scrape", handler.Scrape).Methods("POST")
+	protectedRouter.HandleFunc("/crawl", handler.Crawl).Methods("POST")
+	protectedRouter.HandleFunc("/crawl/{id}", handler.GetCrawlStatus).Methods("GET")
 
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	log.Printf("Server starting on %s", addr)

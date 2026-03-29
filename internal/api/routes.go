@@ -123,22 +123,22 @@ func (h *Handler) Scrape(w http.ResponseWriter, r *http.Request) {
 
 // CrawlRequest represents the request body for /api/v1/crawl
 type CrawlRequestBody struct {
-	URL                 string                `json:"url"`
-	ExcludePaths        []string              `json:"excludePaths,omitempty"`
-	IncludePaths        []string              `json:"includePaths,omitempty"`
-	MaxDepth            int                   `json:"maxDepth,omitempty"`
-	MaxDiscoveryDepth   int                   `json:"maxDiscoveryDepth,omitempty"`
-	IgnoreSitemap       bool                  `json:"ignoreSitemap,omitempty"`
-	IgnoreQueryParams   bool                  `json:"ignoreQueryParameters,omitempty"`
-	Limit               int                   `json:"limit,omitempty"`
-	AllowBackwardLinks  bool                  `json:"allowBackwardLinks,omitempty"`
-	CrawlEntireDomain   bool                  `json:"crawlEntireDomain,omitempty"`
-	AllowExternalLinks  bool                  `json:"allowExternalLinks,omitempty"`
-	AllowSubdomains     bool                  `json:"allowSubdomains,omitempty"`
-	Delay               int                   `json:"delay,omitempty"`
-	MaxConcurrency      int                   `json:"maxConcurrency,omitempty"`
-	ScrapeOptions       *crawler.CrawlRequest `json:"scrapeOptions,omitempty"`
-	ZeroDataRetention   bool                  `json:"zeroDataRetention,omitempty"`
+	URL                string                `json:"url"`
+	ExcludePaths       []string              `json:"excludePaths,omitempty"`
+	IncludePaths       []string              `json:"includePaths,omitempty"`
+	MaxDepth           int                   `json:"maxDepth,omitempty"`
+	MaxDiscoveryDepth  int                   `json:"maxDiscoveryDepth,omitempty"`
+	IgnoreSitemap      bool                  `json:"ignoreSitemap,omitempty"`
+	IgnoreQueryParams  bool                  `json:"ignoreQueryParameters,omitempty"`
+	Limit              int                   `json:"limit,omitempty"`
+	AllowBackwardLinks bool                  `json:"allowBackwardLinks,omitempty"`
+	CrawlEntireDomain  bool                  `json:"crawlEntireDomain,omitempty"`
+	AllowExternalLinks bool                  `json:"allowExternalLinks,omitempty"`
+	AllowSubdomains    bool                  `json:"allowSubdomains,omitempty"`
+	Delay              int                   `json:"delay,omitempty"`
+	MaxConcurrency     int                   `json:"maxConcurrency,omitempty"`
+	ScrapeOptions      *crawler.CrawlRequest `json:"scrapeOptions,omitempty"`
+	ZeroDataRetention  bool                  `json:"zeroDataRetention,omitempty"`
 }
 
 // CrawlResponse represents the response for /api/v1/crawl
@@ -149,12 +149,12 @@ type CrawlResponse struct {
 }
 
 func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
-// Get user from context (set by auth middleware)
+	// Get user from context (set by auth middleware)
 	var userObjID primitive.ObjectID
 	if user, ok := r.Context().Value("user").(*db.User); ok && user != nil {
 		userObjID = user.ID
 	} else {
-		if !h.Cfg.Security.DisableAuth {
+		if !h.Cfg.Security.EnableAuth {
 			writeResponse(w, http.StatusUnauthorized, nil, fmt.Errorf("unauthorized"))
 			return
 		}
@@ -216,13 +216,13 @@ func (h *Handler) Crawl(w http.ResponseWriter, r *http.Request) {
 
 // CrawlStatusResponse represents the response for /api/v1/crawl/{id}
 type CrawlStatusResponse struct {
-	Status      string                 `json:"status"`
-	Total       int                    `json:"total"`
-	Completed   int                    `json:"completed"`
-	CreditsUsed int                    `json:"creditsUsed"`
-	ExpiresAt   string                 `json:"expiresAt"`
-	Next        string                 `json:"next,omitempty"`
-	Data        []crawler.CrawlResult  `json:"data,omitempty"`
+	Status      string                `json:"status"`
+	Total       int                   `json:"total"`
+	Completed   int                   `json:"completed"`
+	CreditsUsed int                   `json:"creditsUsed"`
+	ExpiresAt   string                `json:"expiresAt"`
+	Next        string                `json:"next,omitempty"`
+	Data        []crawler.CrawlResult `json:"data,omitempty"`
 }
 
 func (h *Handler) GetCrawlStatus(w http.ResponseWriter, r *http.Request) {
@@ -322,12 +322,12 @@ func (h *Handler) SSEScrape(w http.ResponseWriter, r *http.Request) {
 
 		// Stream the result
 		event := mcp.SSEEvent{
-			Type: "scrape_result", 
+			Type: "scrape_result",
 			Data: map[string]interface{}{
-				"url": req.URL,
-				"title": result.Metadata["title"],
+				"url":      req.URL,
+				"title":    result.Metadata["title"],
 				"markdown": result.Markdown,
-				"html": result.HTML,
+				"html":     result.HTML,
 				"metadata": result.Metadata,
 			},
 			Timestamp: time.Now(),
@@ -413,11 +413,11 @@ func (h *Handler) MCPCrawl(w http.ResponseWriter, r *http.Request) {
 // MCPStats handles MCP queue statistics requests
 func (h *Handler) MCPStats(w http.ResponseWriter, r *http.Request) {
 	stats := map[string]interface{}{
-		"activeJobs": 0,
-		"pendingJobs": 0,
+		"activeJobs":    0,
+		"pendingJobs":   0,
 		"completedJobs": 0,
-		"failedJobs": 0,
-		"serverTime": time.Now().Format(time.RFC3339),
+		"failedJobs":    0,
+		"serverTime":    time.Now().Format(time.RFC3339),
 	}
 
 	// TODO: Implement actual statistics gathering

@@ -14,16 +14,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ptr returns a pointer to the given value
-func ptr[T any](v T) *T {
-	return &v
-}
-
 // MCPServer represents the MCP server instance
 type MCPServer struct {
-	server   *mcp.Server
-	db       *db.Database
-	cfg      *config.Config
+	server    *mcp.Server
+	db        *db.Database
+	cfg       *config.Config
 	crawlJobs map[string]*CrawlJob
 }
 
@@ -88,7 +83,7 @@ func (s *MCPServer) registerTools() {
 		Description: "Start a crawl job for multiple pages",
 	}, s.handleCrawl)
 
-	// Stats tool  
+	// Stats tool
 	mcp.AddTool(s.server, &mcp.Tool{
 		Name:        "stats",
 		Description: "Get crawl queue statistics",
@@ -96,9 +91,7 @@ func (s *MCPServer) registerTools() {
 }
 
 // handleScrape handles the scrape tool
-func (s *MCPServer) handleScrape(ctx context.Context, ss *mcp.ServerSession, params *mcp.CallToolParamsFor[ScrapeArgs]) (*mcp.CallToolResultFor[struct{}], error) {
-	args := params.Arguments
-
+func (s *MCPServer) handleScrape(ctx context.Context, _ *mcp.CallToolRequest, args ScrapeArgs) (*mcp.CallToolResult, any, error) {
 	// Convert parameters to CrawlRequest
 	req := &crawler.CrawlRequest{
 		URL:             args.URL,
@@ -118,35 +111,33 @@ func (s *MCPServer) handleScrape(ctx context.Context, ss *mcp.ServerSession, par
 	// Perform the scrape
 	result, err := crawler.CrawlURL(req, s.cfg)
 	if err != nil {
-		return &mcp.CallToolResultFor[struct{}]{
+		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{
 					Text: fmt.Sprintf("Error scraping URL: %v", err),
 				},
 			},
 			IsError: true,
-		}, nil
+		}, nil, nil
 	}
 
 	// Return the result
 	resultJSON, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &mcp.CallToolResultFor[struct{}]{
+	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{
 				Text: string(resultJSON),
 			},
 		},
-	}, nil
+	}, nil, nil
 }
 
 // handleCrawl handles the crawl tool
-func (s *MCPServer) handleCrawl(ctx context.Context, ss *mcp.ServerSession, params *mcp.CallToolParamsFor[CrawlArgs]) (*mcp.CallToolResultFor[struct{}], error) {
-	args := params.Arguments
-
+func (s *MCPServer) handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, args CrawlArgs) (*mcp.CallToolResult, any, error) {
 	// Set defaults
 	maxDepth := args.MaxDepth
 	if maxDepth == 0 {
@@ -173,29 +164,29 @@ func (s *MCPServer) handleCrawl(ctx context.Context, ss *mcp.ServerSession, para
 	// Start the crawl in a goroutine
 	go s.performCrawl(job, maxDepth, maxPages)
 
-	return &mcp.CallToolResultFor[struct{}]{
+	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{
 				Text: fmt.Sprintf("Crawl job started with ID: %s", jobID),
 			},
 		},
-	}, nil
+	}, nil, nil
 }
 
 // performCrawl performs the actual crawling
 func (s *MCPServer) performCrawl(job *CrawlJob, maxDepth, maxPages int) {
 	job.Status = "running"
-	
+
 	// TODO: Implement actual crawling logic
 	// For now, we'll simulate progress
 	for i := 0; i < maxPages; i++ {
 		time.Sleep(1 * time.Second)
 		job.Progress = i + 1
-		
+
 		// Simulate sending SSE update
 		log.Printf("Crawl progress: %d/%d pages", job.Progress, job.Total)
 	}
-	
+
 	job.Status = "completed"
 	now := time.Now()
 	job.EndTime = &now
@@ -205,7 +196,7 @@ func (s *MCPServer) performCrawl(job *CrawlJob, maxDepth, maxPages int) {
 type StatsArgs struct{}
 
 // handleStats handles the stats tool
-func (s *MCPServer) handleStats(ctx context.Context, ss *mcp.ServerSession, params *mcp.CallToolParamsFor[StatsArgs]) (*mcp.CallToolResultFor[struct{}], error) {
+func (s *MCPServer) handleStats(ctx context.Context, _ *mcp.CallToolRequest, _ StatsArgs) (*mcp.CallToolResult, any, error) {
 	stats := map[string]interface{}{
 		"activeJobs":    0,
 		"pendingJobs":   0,
@@ -250,16 +241,16 @@ func (s *MCPServer) handleStats(ctx context.Context, ss *mcp.ServerSession, para
 	// Return the stats
 	statsJSON, err := json.MarshalIndent(stats, "", "  ")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &mcp.CallToolResultFor[struct{}]{
+	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{
 				Text: string(statsJSON),
 			},
 		},
-	}, nil
+	}, nil, nil
 }
 
 // Start starts the MCP server using the provided transport

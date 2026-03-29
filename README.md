@@ -59,7 +59,7 @@ Environment variables can be set in the `.env` file or as system environment var
 
 ### Security
 - `JWT_SECRET`: Secret for JWT tokens
-- `DISABLE_AUTH`: Set to `true` to disable authentication (default: false)
+- `ENABLE_AUTH`: Set to `true` to disable authentication (default: false)
 
 ### Crawler Configuration
 - `MAX_CONCURRENT_CRAWLS`: Maximum concurrent crawl operations (default: 10)
@@ -151,7 +151,7 @@ Authorization: Bearer <api_key>  # Only if auth is enabled
 
 ### With Authentication Disabled
 
-Set `DISABLE_AUTH=true` in your `.env` file:
+Set `ENABLE_AUTH=true` in your `.env` file:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/scrape \

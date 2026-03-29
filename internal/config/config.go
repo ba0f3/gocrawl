@@ -8,13 +8,13 @@ import (
 
 // Config holds all configuration for our application
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Security SecurityConfig
-	Crawler  CrawlerConfig
+	Server    ServerConfig
+	Database  DatabaseConfig
+	Security  SecurityConfig
+	Crawler   CrawlerConfig
 	Retention RetentionConfig
 	RateLimit RateLimitConfig
-	SSE      SSEConfig
+	SSE       SSEConfig
 }
 
 type ServerConfig struct {
@@ -28,15 +28,15 @@ type DatabaseConfig struct {
 }
 
 type SecurityConfig struct {
-	JWTSecret   string
-	DisableAuth bool
+	JWTSecret  string
+	EnableAuth bool
 }
 
 type CrawlerConfig struct {
 	MaxConcurrentCrawls int
 	CrawlTimeout        time.Duration
-	UserAgent          string
-	Proxies            []string
+	UserAgent           string
+	Proxies             []string
 	EnableProxyRotation bool
 }
 
@@ -66,14 +66,14 @@ func Load() (*Config, error) {
 			DBName:   viper.GetString("DB_NAME"),
 		},
 		Security: SecurityConfig{
-			JWTSecret:   viper.GetString("JWT_SECRET"),
-			DisableAuth: viper.GetBool("DISABLE_AUTH"),
+			JWTSecret:  viper.GetString("JWT_SECRET"),
+			EnableAuth: viper.GetBool("ENABLE_AUTH"),
 		},
 		Crawler: CrawlerConfig{
 			MaxConcurrentCrawls: viper.GetInt("MAX_CONCURRENT_CRAWLS"),
 			CrawlTimeout:        viper.GetDuration("CRAWL_TIMEOUT"),
-			UserAgent:          viper.GetString("USER_AGENT"),
-			Proxies:            viper.GetStringSlice("PROXIES"),
+			UserAgent:           viper.GetString("USER_AGENT"),
+			Proxies:             viper.GetStringSlice("PROXIES"),
 			EnableProxyRotation: viper.GetBool("ENABLE_PROXY_ROTATION"),
 		},
 		Retention: RetentionConfig{
