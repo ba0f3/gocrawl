@@ -1,27 +1,24 @@
-version: '3.8'
-
 services:
   gocrawl:
     build: .
     ports:
       - "8080:8080"
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - PORT=8080
-      - HOST=0.0.0.0
-      - MONGO_URI=mongodb://mongo:27017
-      - DB_NAME=gocrawl
-      - JWT_SECRET=your-secret-key-here
-      - ENABLE_AUTH=false
-      - MAX_CONCURRENT_CRAWLS=10
-      - CRAWL_TIMEOUT=30s
-      - USER_AGENT=GoCrawl/1.0
-      - DATA_RETENTION_DAYS=30
-      - CLEANUP_INTERVAL=24h
-      - RATE_LIMIT_REQUESTS=100
-      - RATE_LIMIT_WINDOW=1h
-      # Proxy configuration (uncomment and configure as needed)
-      # - PROXIES=http://proxy1:port,http://proxy2:port
-      # - ENABLE_PROXY_ROTATION=true    
+      PORT: ${PORT:-8080}
+      HOST: ${HOST:-0.0.0.0}
+      DB_NAME: ${DB_NAME:-gocrawl}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-here}
+      ENABLE_AUTH: ${ENABLE_AUTH:-false}
+      MAX_CONCURRENT_CRAWLS: ${MAX_CONCURRENT_CRAWLS:-10}
+      CRAWL_TIMEOUT: ${CRAWL_TIMEOUT:-30s}
+      USER_AGENT: ${USER_AGENT:-GoCrawl/1.0}
+      DATA_RETENTION_DAYS: ${DATA_RETENTION_DAYS:-30}
+      CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-24h}
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-100}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1h}
     restart: unless-stopped
 
   lightpanda:

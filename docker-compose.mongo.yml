@@ -1,20 +1,25 @@
+# Optional overlay: MongoDB for ENABLE_AUTH=true (or any mongo-backed setup).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.mongo.yml up -d
+# Set in .env (see README): DATABASE_DRIVER=mongo, MONGO_URI=mongodb://mongo:27017, ENABLE_AUTH=true, JWT_SECRET=...
+
 services:
-
-  gocrawl:
-    environment:
-      - MONGO_URI=mongodb://mongo:27017
-    depends_on:
-      - mongo
-
   mongo:
-    image: mongo:6
-    ports:
-      - "27017:27017"
+    image: mongo:7
+    restart: unless-stopped
     volumes:
       - mongo_data:/data/db
-    environment:
-      - MONGO_INITDB_DATABASE=gocrawl
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  gocrawl:
+    depends_on:
+      mongo:
+        condition: service_healthy
 
 volumes:
   mongo_data:

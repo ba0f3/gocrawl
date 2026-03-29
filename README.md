@@ -12,9 +12,26 @@ A production-grade Go web crawler that provides a Firecrawl-compatible API for w
 - Optional HTTP rate limiting, crawl retries, and chromedp/Lightpanda fallback for JS-heavy pages
 - Automatic data cleanup and crawl job progress tracking
 
+## Quick start (Docker / GHCR)
+
+Run the prebuilt image (no database needed with `ENABLE_AUTH=false`):
+
+```bash
+docker pull ghcr.io/ba0f3/gocrawl:latest
+
+docker run --rm -p 8080:8080 \
+  -e PORT=8080 \
+  -e HOST=0.0.0.0 \
+  -e ENABLE_AUTH=false \
+  ghcr.io/ba0f3/gocrawl:latest
+```
+
+The API is at `http://localhost:8080/v1/...` (for example `POST /v1/scrape`). For private images, `docker login ghcr.io` first; for auth and databases, see [Docker installation](#docker-installation) and **Configuration**.
+
 ## Prerequisites
 
-- Go 1.26 or higher (see `go.mod`)
+- **From source:** Go 1.26 or higher (see `go.mod`)
+- **Docker:** optional — see [Docker installation](#docker-installation) to run a prebuilt image or build locally
 - When `ENABLE_AUTH=true`: a database (MongoDB, PostgreSQL, or SQLite) per configuration
 
 ## Installation
@@ -50,6 +67,84 @@ Or use the Makefile:
 make run      # development
 make build    # produces ./bin/gocrawl
 ```
+
+## Docker installation
+
+Requires [Docker](https://docs.docker.com/get-docker/). Optional: [Docker Compose](https://docs.docker.com/compose/) for `docker-compose.yml`.
+
+### Pull a prebuilt image (GHCR)
+
+CI publishes images to GitHub Container Registry on pushes to `main` and version tags (`v*`). Replace `<owner>` with your GitHub user or organization (lowercase).
+
+```bash
+docker pull ghcr.io/<owner>/gocrawl:latest
+```
+
+If the package is private, sign in first:
+
+```bash
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u USERNAME --password-stdin
+```
+
+Run the container (auth disabled; in-memory crawl jobs — same behavior as a local dev run without a database):
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e PORT=8080 \
+  -e HOST=0.0.0.0 \
+  -e ENABLE_AUTH=false \
+  ghcr.io/<owner>/gocrawl:latest
+```
+
+The API is available at `http://localhost:8080/v1/...`. For `ENABLE_AUTH=true`, pass database settings (`DATABASE_DRIVER`, `MONGO_URI` or `DATABASE_DSN`, etc.) — see **Configuration** below.
+
+### Build the image locally
+
+From the repository root:
+
+```bash
+docker build -t gocrawl:local .
+docker run --rm -p 8080:8080 -e PORT=8080 -e HOST=0.0.0.0 -e ENABLE_AUTH=false gocrawl:local
+```
+
+### Docker Compose
+
+Base stack (`docker-compose.yml`): **gocrawl** on port `8080` and **lightpanda** on `9222` (optional JS/CDP fallback). MongoDB is **not** included.
+
+1. Copy the environment template and edit values (see **Configuration** below):
+
+```bash
+cp .env.example .env
+```
+
+2. Start:
+
+```bash
+docker compose up --build -d
+```
+
+Compose loads `.env` when present (`env_file`); variables also support defaults in `docker-compose.yml`. For a typical no-auth scrape API, keep `ENABLE_AUTH=false` in `.env` (no database required).
+
+#### Optional MongoDB (`docker-compose.mongo.yml`)
+
+Use this **only** when you want MongoDB in Compose (for example `ENABLE_AUTH=true` with `DATABASE_DRIVER=mongo`).
+
+1. In `.env`, set at least:
+
+```bash
+DATABASE_DRIVER=mongo
+MONGO_URI=mongodb://mongo:27017
+ENABLE_AUTH=true
+JWT_SECRET=<a-long-random-secret>
+```
+
+2. Start both files:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.mongo.yml up --build -d
+```
+
+The overlay adds the **mongo** service and makes **gocrawl** wait until Mongo is healthy. For Postgres or SQLite instead, run your database elsewhere and set `DATABASE_DRIVER` / `DATABASE_DSN` (or `SQLITE_PATH`) in `.env` without the Mongo overlay.
 
 ## Configuration
 
@@ -147,7 +242,7 @@ When `ENABLE_AUTH=false`, omit `Authorization`:
 curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/scrape" \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://example.com",
+    "url": "https://hehemetal.com",
     "onlyMainContent": true,
     "formats": ["markdown", "html"]
   }' | jq .
@@ -232,7 +327,7 @@ Response includes `status` (`queued`, `crawling`, `completed`, …), `total`, `c
 ```bash
 curl -sS -X POST "http://localhost:8080/v1/scrape" \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com","onlyMainContent":true,"formats":["markdown"]}'
+  -d '{"url":"https://hehemetal.com","onlyMainContent":true,"formats":["markdown"]}'
 ```
 
 ### 7. Scrape with custom selectors
@@ -241,7 +336,7 @@ curl -sS -X POST "http://localhost:8080/v1/scrape" \
 curl -sS -X POST "http://localhost:8080/v1/scrape" \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://example.com/article",
+    "url": "https://hehemetal.com/news/buc-tuong-duoc-duc-bang-bac-cua-helios",
     "contentSelector": "article",
     "linkSelector": "article a[href]",
     "formats": ["markdown","html"]
@@ -254,7 +349,7 @@ curl -sS -X POST "http://localhost:8080/v1/scrape" \
 curl -sS -X POST "http://localhost:8080/v1/crawl" \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://example.com/blog",
+    "url": "https://hehemetal.com/category/news",
     "limit": 20,
     "maxDepth": 2,
     "linkSelectors": ["article a[href]", ".pagination a[href]"],
@@ -277,7 +372,7 @@ curl -sS -X POST "http://localhost:8080/v1/crawl" \
     "markdown": "...",
     "html": "...",
     "rawHtml": "...",
-    "links": ["https://example.com/..."],
+    "links": ["https://hehemetal.com/..."],
     "metadata": { "title": "...", "sourceURL": "..." }
   }
 }
@@ -286,7 +381,7 @@ curl -sS -X POST "http://localhost:8080/v1/crawl" \
 **Start crawl** (raw JSON, not wrapped):
 
 ```json
-{ "success": true, "id": "<job-uuid>", "url": "https://example.com" }
+{ "success": true, "id": "<job-uuid>", "url": "https://hehemetal.com" }
 ```
 
 **Crawl status** (raw JSON):
