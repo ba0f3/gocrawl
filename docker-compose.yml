@@ -2,12 +2,12 @@ services:
   gocrawl:
     build: .
     ports:
-      - "8080:8080"
+      - "8151:8151"
     env_file:
       - path: .env
         required: false
     environment:
-      PORT: ${PORT:-8080}
+      PORT: ${PORT:-8151}
       HOST: ${HOST:-0.0.0.0}
       DB_NAME: ${DB_NAME:-gocrawl}
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-here}

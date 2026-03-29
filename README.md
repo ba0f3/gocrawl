@@ -19,14 +19,14 @@ Run the prebuilt image (no database needed with `ENABLE_AUTH=false`):
 ```bash
 docker pull ghcr.io/ba0f3/gocrawl:latest
 
-docker run --rm -p 8080:8080 \
-  -e PORT=8080 \
+docker run --rm -p 8151:8151 \
+  -e PORT=8151 \
   -e HOST=0.0.0.0 \
   -e ENABLE_AUTH=false \
   ghcr.io/ba0f3/gocrawl:latest
 ```
 
-The API is at `http://localhost:8080/v1/...` (for example `POST /v1/scrape`). For private images, `docker login ghcr.io` first; for auth and databases, see [Docker installation](#docker-installation) and **Configuration**.
+The API is at `http://localhost:8151/v1/...` (for example `POST /v1/scrape`). For private images, `docker login ghcr.io` first; for auth and databases, see [Docker installation](#docker-installation) and **Configuration**.
 
 ## Prerequisites
 
@@ -89,14 +89,14 @@ echo "$GITHUB_TOKEN" | docker login ghcr.io -u USERNAME --password-stdin
 Run the container (auth disabled; in-memory crawl jobs — same behavior as a local dev run without a database):
 
 ```bash
-docker run --rm -p 8080:8080 \
-  -e PORT=8080 \
+docker run --rm -p 8151:8151 \
+  -e PORT=8151 \
   -e HOST=0.0.0.0 \
   -e ENABLE_AUTH=false \
   ghcr.io/<owner>/gocrawl:latest
 ```
 
-The API is available at `http://localhost:8080/v1/...`. For `ENABLE_AUTH=true`, pass database settings (`DATABASE_DRIVER`, `MONGO_URI` or `DATABASE_DSN`, etc.) — see **Configuration** below.
+The API is available at `http://localhost:8151/v1/...`. For `ENABLE_AUTH=true`, pass database settings (`DATABASE_DRIVER`, `MONGO_URI` or `DATABASE_DSN`, etc.) — see **Configuration** below.
 
 ### Build the image locally
 
@@ -104,12 +104,12 @@ From the repository root:
 
 ```bash
 docker build -t gocrawl:local .
-docker run --rm -p 8080:8080 -e PORT=8080 -e HOST=0.0.0.0 -e ENABLE_AUTH=false gocrawl:local
+docker run --rm -p 8151:8151 -e PORT=8151 -e HOST=0.0.0.0 -e ENABLE_AUTH=false gocrawl:local
 ```
 
 ### Docker Compose
 
-Base stack (`docker-compose.yml`): **gocrawl** on port `8080` and **lightpanda** on `9222` (optional JS/CDP fallback). MongoDB is **not** included.
+Base stack (`docker-compose.yml`): **gocrawl** on port `8151` and **lightpanda** on `9222` (optional JS/CDP fallback). MongoDB is **not** included.
 
 1. Copy the environment template and edit values (see **Configuration** below):
 
@@ -154,7 +154,7 @@ Environment variables can be set in the `.env` file or as system environment var
 
 | Variable | Description |
 |----------|-------------|
-| `PORT` | Server port (default: `8080`) |
+| `PORT` | Server port (default: `8151`) |
 | `HOST` | Bind address (default: empty; use `0.0.0.0` to listen on all interfaces) |
 
 ### Database
@@ -208,7 +208,7 @@ All HTTP APIs are mounted at **`/v1`** (not `/api/v1`).
 Example base:
 
 ```bash
-export BASE_URL="http://localhost:8080"
+export BASE_URL="http://localhost:8151"
 ```
 
 ## API overview
@@ -248,14 +248,14 @@ When chromedp runs (auto fallback or `forceBrowser`), **`metadata`** may include
 
 ## Testing with curl
 
-The examples below use `$BASE_URL` (default `http://localhost:8080`). With authentication enabled, set `API_KEY` after login.
+The examples below use `$BASE_URL` (default `http://localhost:8151`). With authentication enabled, set `API_KEY` after login.
 
 ### 1. Scrape a single page (auth disabled)
 
 When `ENABLE_AUTH=false`, omit `Authorization`:
 
 ```bash
-curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/scrape" \
+curl -sS -X POST "${BASE_URL:-http://localhost:8151}/v1/scrape" \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://hehemetal.com",
@@ -269,11 +269,11 @@ curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/scrape" \
 Requires MongoDB or SQL configured and `ENABLE_AUTH=true`.
 
 ```bash
-curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/auth/register" \
+curl -sS -X POST "${BASE_URL:-http://localhost:8151}/v1/auth/register" \
   -H "Content-Type: application/json" \
   -d '{"username":"demo","password":"demo-secret"}' | jq .
 
-curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/auth/login" \
+curl -sS -X POST "${BASE_URL:-http://localhost:8151}/v1/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"demo","password":"demo-secret"}' | jq .
 ```
@@ -281,7 +281,7 @@ curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/auth/login" \
 Save the API key from the login response:
 
 ```bash
-export API_KEY="$(curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/auth/login" \
+export API_KEY="$(curl -sS -X POST "${BASE_URL:-http://localhost:8151}/v1/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"demo","password":"demo-secret"}' | jq -r .data.apiKey)"
 echo "$API_KEY"
@@ -290,7 +290,7 @@ echo "$API_KEY"
 ### 3. Scrape with API key
 
 ```bash
-curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/scrape" \
+curl -sS -X POST "${BASE_URL:-http://localhost:8151}/v1/scrape" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${API_KEY}" \
   -d '{
@@ -307,7 +307,7 @@ Successful responses use the wrapper: `{"success":true,"data":{...}}` (or `succe
 Returns `id` immediately; workers process the queue in the background.
 
 ```bash
-curl -sS -X POST "${BASE_URL:-http://localhost:8080}/v1/crawl" \
+curl -sS -X POST "${BASE_URL:-http://localhost:8151}/v1/crawl" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${API_KEY}" \
   -d '{
@@ -332,7 +332,7 @@ Use the **`id` from the crawl POST response** (not another UUID). A wrong or exp
 ```bash
 JOB_ID="<paste-id-from-crawl-response>"
 
-curl -sS "${BASE_URL:-http://localhost:8080}/v1/crawl/${JOB_ID}" \
+curl -sS "${BASE_URL:-http://localhost:8151}/v1/crawl/${JOB_ID}" \
   -H "Authorization: Bearer ${API_KEY}" | jq .
 ```
 
@@ -341,7 +341,7 @@ Response includes `status` (`queued`, `crawling`, `completed`, …), `total`, `c
 ### 6. Quick one-liner (auth off)
 
 ```bash
-curl -sS -X POST "http://localhost:8080/v1/scrape" \
+curl -sS -X POST "http://localhost:8151/v1/scrape" \
   -H "Content-Type: application/json" \
   -d '{"url":"https://hehemetal.com","onlyMainContent":true,"formats":["markdown"]}'
 ```
@@ -349,7 +349,7 @@ curl -sS -X POST "http://localhost:8080/v1/scrape" \
 ### 7. Scrape with custom selectors
 
 ```bash
-curl -sS -X POST "http://localhost:8080/v1/scrape" \
+curl -sS -X POST "http://localhost:8151/v1/scrape" \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://hehemetal.com/news/buc-tuong-duoc-duc-bang-bac-cua-helios",
@@ -362,7 +362,7 @@ curl -sS -X POST "http://localhost:8080/v1/scrape" \
 ### 8. Crawl with restricted link discovery
 
 ```bash
-curl -sS -X POST "http://localhost:8080/v1/crawl" \
+curl -sS -X POST "http://localhost:8151/v1/crawl" \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://hehemetal.com/category/news",

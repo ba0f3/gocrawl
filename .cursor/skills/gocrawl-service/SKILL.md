@@ -14,7 +14,7 @@ GoCrawl is a Go HTTP service: synchronous **scrape** (one URL) and asynchronous 
 ## Quick facts
 
 ```bash
-export BASE_URL="http://localhost:8080"
+export BASE_URL="http://localhost:8151"
 ```
 
 | Topic | Summary |

@@ -126,7 +126,7 @@ func Load() (*Config, error) {
 
 	// Set defaults
 	if cfg.Server.Port == "" {
-		cfg.Server.Port = "8080"
+		cfg.Server.Port = "8151"
 	}
 	if cfg.Database.MongoURI == "" {
 		cfg.Database.MongoURI = "mongodb://localhost:27017"

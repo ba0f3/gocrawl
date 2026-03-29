@@ -14,7 +14,7 @@ import (
 // Example MCP client demonstrating both regular HTTP and SSE streaming
 
 func main() {
-	baseURL := "http://localhost:8080/v1/mcp"
+	baseURL := "http://localhost:8151/v1/mcp"
 
 	// Example 1: Regular HTTP request
 	fmt.Println("=== Example 1: Regular HTTP Request ===")

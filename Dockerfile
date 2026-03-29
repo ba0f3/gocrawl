@@ -25,7 +25,7 @@ FROM alpine:latest
 COPY --from=builder /gocrawl /gocrawl
 
 # Expose the port the application runs on
-EXPOSE 8080
+EXPOSE 8151
 
 # Set the entrypoint for the container
 ENTRYPOINT ["/gocrawl"]

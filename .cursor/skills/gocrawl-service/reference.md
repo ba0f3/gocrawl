@@ -6,7 +6,7 @@ This document explains how to run GoCrawl and how **`/v1/scrape`** and **`/v1/cr
 
 ### Base stack (no MongoDB)
 
-The default `docker-compose.yml` runs **gocrawl** (port **8080**) and **lightpanda** (port **9222**, optional CDP/JS fallback). MongoDB is **not** included.
+The default `docker-compose.yml` runs **gocrawl** (port **8151**) and **lightpanda** (port **9222**, optional CDP/JS fallback). MongoDB is **not** included.
 
 1. From the repository root, create a local env file:
 
@@ -22,7 +22,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-4. Base URL for HTTP calls: **`http://localhost:8080`** (or your host). API routes live under **`/v1`**.
+4. Base URL for HTTP calls: **`http://localhost:8151`** (or your host). API routes live under **`/v1`**.
 
 5. **Lightpanda / chromedp:** With Compose, **`LIGHTPANDA_HTTP_URL`** defaults to **`http://lightpanda:9222`** on the **gocrawl** service so the process can resolve the CDP socket via **`/json/version`** (no manual `ws://…` paste). Alternatively set **`LIGHTPANDA_WS_URL`** to the full `webSocketDebuggerUrl`. Auto fallback uses chromedp after Colly for errors, selected HTTP statuses (401/403/429/503 by default), challenge-style HTML, SPA shells, or very thin main markdown; set **`CHROMEDP_AUTO_FALLBACK=false`** to disable that and use only JSON **`forceBrowser: true`**. After navigation, chromedp polls **`document.readyState`** with short CDP calls until **`complete`** or **stable `interactive`** (many SPAs never fire `complete` after API calls), then optional **`CHROMEDP_NAV_WAIT`** and hydration delays are **paced** with tiny CDP evaluations so Lightpanda is less likely to log **CDP timeout** on an idle socket while the page finishes XHR-driven rendering. See `README.md` (Configuration) for **`CHROMEDP_*`** tuning and anti-bot limitations.
 
@@ -51,8 +51,8 @@ The overlay adds the **mongo** service and makes **gocrawl** wait until Mongo is
 
 ```bash
 docker pull ghcr.io/ba0f3/gocrawl:latest
-docker run --rm -p 8080:8080 \
-  -e PORT=8080 -e HOST=0.0.0.0 -e ENABLE_AUTH=false \
+docker run --rm -p 8151:8151 \
+  -e PORT=8151 -e HOST=0.0.0.0 -e ENABLE_AUTH=false \
   ghcr.io/ba0f3/gocrawl:latest
 ```
 
@@ -163,7 +163,7 @@ Use when integrating MCP-style clients; semantics align with scrape/crawl.
 
 ## 7. Minimal client checklist
 
-1. Set **`BASE_URL`** (e.g. `http://localhost:8080`).
+1. Set **`BASE_URL`** (e.g. `http://localhost:8151`).
 2. If auth is on: register, login, store **`apiKey`**, send **`Authorization: Bearer <apiKey>`**.
 3. Single page: **`POST /v1/scrape`** with `url` (+ optional `formats`, selectors).
 4. Multi page: **`POST /v1/crawl`**, read **`id`**, loop **`GET /v1/crawl/{id}`** until done, read **`data`** array.
