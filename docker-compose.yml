@@ -17,8 +17,9 @@ services:
       USER_AGENT: ${USER_AGENT:-GoCrawl/1.0}
       DATA_RETENTION_DAYS: ${DATA_RETENTION_DAYS:-30}
       CLEANUP_INTERVAL: ${CLEANUP_INTERVAL:-24h}
-      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-100}
-      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-1h}
+      # Rate limiting is opt-in: set both to positive values (e.g. 100 and 1h) to enable.
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-0}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-0}
       LIGHTPANDA_HTTP_URL: ${LIGHTPANDA_HTTP_URL:-http://lightpanda:9222}
     restart: unless-stopped
 

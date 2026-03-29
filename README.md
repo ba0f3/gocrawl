@@ -200,7 +200,7 @@ Environment variables can be set in the `.env` file or as system environment var
 | `CHROMEDP_HYDRATION_POLL_INTERVAL` | Delay between hydration polls (default `300ms`, also paced with CDP pings) |
 | `CHROMEDP_HYDRATION_MAX_POLLS` | Max hydration polls (default `22`) |
 | `CHROMEDP_HYDRATION_MIN_TEXT_RUNES` | Stop polling when main-selector text length reaches this (default `80`) |
-| `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW` | If both set (e.g. `100` and `1m`), enables per-client rate limiting on `/v1` |
+| `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW` | **Off by default** (`0` or unset). If both are positive (e.g. `100` and `1h`), enables per-client rate limiting on `/v1`. The limiter uses a token bucket: burst equals `RATE_LIMIT_REQUESTS`, then refill is spread evenly across `RATE_LIMIT_WINDOW` (so `100`/`1h` averages about one request every 36 seconds after the burst). |
 
 **Chromedp limitations:** Running pages in Lightpanda helps with **client-side rendering** and some **simple bot or challenge pages**, but it does **not** guarantee bypass of advanced anti-bot (CAPTCHA vendors, strict TLS/JA3 fingerprinting, etc.). Difficult sites may need proxies, a full browser profile, or manual steps.
 
