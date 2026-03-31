@@ -2,10 +2,12 @@ package extractor
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
+	"log"
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
@@ -126,6 +128,15 @@ const jsevalDrainTimers = `
 `
 
 var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
+var errExecutionTimeout = errors.New("execution timeout")
+
+var classicScriptTypes = map[string]struct{}{
+	"":                       {},
+	"text/javascript":        {},
+	"application/javascript": {},
+	"text/ecmascript":        {},
+	"application/ecmascript": {},
+}
 
 // JsDataBlob holds data extracted from inline script execution (webclaw-style).
 type JsDataBlob struct {
@@ -145,7 +156,9 @@ func ExtractJsDataFromHTML(html string) []JsDataBlob {
 		if src, _ := s.Attr("src"); src != "" {
 			return
 		}
-		if t, _ := s.Attr("type"); t == "module" {
+		t, _ := s.Attr("type")
+		t = strings.ToLower(strings.TrimSpace(t))
+		if _, ok := classicScriptTypes[t]; !ok {
 			return
 		}
 		txt := strings.TrimSpace(s.Text())
@@ -175,17 +188,27 @@ func ExtractJsDataFromHTML(html string) []JsDataBlob {
 			break
 		}
 		if err := runWithDeadline(vm, script, deadline); err != nil {
-			break
+			if isExecutionTimeoutErr(err) {
+				break
+			}
+			log.Printf("jseval: script runtime error: %v", err)
+			continue
 		}
 		if err := runWithDeadline(vm, jsevalDrainTimers, deadline); err != nil {
-			break
+			if isExecutionTimeoutErr(err) {
+				break
+			}
+			log.Printf("jseval: timer drain runtime error: %v", err)
 		}
 	}
-	v, err := vm.RunString(jsevalScan)
+	v, err := runValueWithDeadline(vm, jsevalScan, deadline)
 	if err != nil {
 		return nil
 	}
-	raw := v.String()
+	raw, ok := v.Export().(string)
+	if !ok {
+		return nil
+	}
 	var blobs []JsDataBlob
 	if err := json.Unmarshal([]byte(raw), &blobs); err != nil {
 		return nil
@@ -194,9 +217,14 @@ func ExtractJsDataFromHTML(html string) []JsDataBlob {
 }
 
 func runWithDeadline(vm *goja.Runtime, script string, deadline time.Time) error {
+	_, err := runValueWithDeadline(vm, script, deadline)
+	return err
+}
+
+func runValueWithDeadline(vm *goja.Runtime, script string, deadline time.Time) (goja.Value, error) {
 	remaining := time.Until(deadline)
 	if remaining <= 0 {
-		return fmt.Errorf("execution timeout")
+		return nil, errExecutionTimeout
 	}
 	done := make(chan struct{})
 	timer := time.NewTimer(remaining)
@@ -212,12 +240,22 @@ func runWithDeadline(vm *goja.Runtime, script string, deadline time.Time) error 
 	go func() {
 		select {
 		case <-timer.C:
-			vm.Interrupt(fmt.Errorf("execution timeout"))
+			vm.Interrupt(errExecutionTimeout)
 		case <-done:
 		}
 	}()
-	_, err := vm.RunString(script)
-	return err
+	v, err := vm.RunString(script)
+	return v, err
+}
+
+func isExecutionTimeoutErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errExecutionTimeout) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "execution timeout")
 }
 
 // ExtractReadableTextFromBlobs walks JSON blobs and builds a markdown section (webclaw-style).
@@ -297,9 +335,13 @@ func filterReadable(s string) string {
 		}
 	}
 	alphaSpace := 0
+	hasSeparator := false
 	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == ' ' || unicodeIsSpace(r) {
+		if unicode.IsLetter(r) || unicode.IsSpace(r) {
 			alphaSpace++
+		}
+		if unicode.IsSpace(r) || unicode.IsPunct(r) {
+			hasSeparator = true
 		}
 	}
 	totalRunes := utf8.RuneCountInString(s)
@@ -309,7 +351,7 @@ func filterReadable(s string) string {
 	if float64(alphaSpace)/float64(totalRunes) < 0.6 {
 		return ""
 	}
-	if !strings.Contains(s, " ") {
+	if !hasSeparator {
 		return ""
 	}
 	clean := strings.TrimSpace(htmlTagRe.ReplaceAllString(s, ""))
@@ -317,10 +359,6 @@ func filterReadable(s string) string {
 		return ""
 	}
 	return clean
-}
-
-func unicodeIsSpace(r rune) bool {
-	return r == '\t' || r == '\n' || r == '\r' || r == '\u00a0'
 }
 
 func extractNextFText(rawJSON string) []string {

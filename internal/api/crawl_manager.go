@@ -79,6 +79,8 @@ func (cm *CrawlManager) failJob(jobID, msg string) {
 
 // runCrawlJob executes a single crawl job (called by workers).
 func (cm *CrawlManager) runCrawlJob(jobID string, req *CrawlRequestBody) {
+	jobCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("crawl panic job %s: %v", jobID, r)
@@ -89,7 +91,7 @@ func (cm *CrawlManager) runCrawlJob(jobID string, req *CrawlRequestBody) {
 
 	cm.updateCrawlStatus(jobID, "crawling", 0)
 
-	results := cm.performCrawling(req, jobID)
+	results := cm.performCrawling(jobCtx, req, jobID)
 
 	cm.updateCrawlTotal(jobID, len(results))
 
@@ -148,7 +150,7 @@ func linkInArticleOrMain(e *colly.HTMLElement) bool {
 	return false
 }
 
-func (cm *CrawlManager) performCrawling(req *CrawlRequestBody, jobID string) []*crawler.ScrapeResult {
+func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBody, jobID string) []*crawler.ScrapeResult {
 	results := make([]*crawler.ScrapeResult, 0)
 	visited := make(map[string]bool)
 	var crawlMu sync.Mutex
@@ -228,7 +230,7 @@ func (cm *CrawlManager) performCrawling(req *CrawlRequestBody, jobID string) []*
 			scrapeOpts.LinkSelector = strings.Join(crawlSels, ", ")
 		}
 
-		result, err := crawler.ScrapeURLWithContext(context.Background(), &scrapeOpts, cm.cfg)
+		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, cm.cfg)
 		if err != nil {
 			log.Printf("Error scraping page %s: %v", r.Request.URL, err)
 			return

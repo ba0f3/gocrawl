@@ -32,7 +32,7 @@ func findBestCandidate(doc *goquery.Document, exclude map[*html.Node]struct{}) *
 }
 
 func isUnderExcluded(sel *goquery.Selection, exclude map[*html.Node]struct{}) bool {
-	for cur := sel; cur.Length() > 0; cur = cur.Parent() {
+	for cur := sel.Parent(); cur.Length() > 0; cur = cur.Parent() {
 		if n := cur.Get(0); n != nil && isExcluded(n, exclude) {
 			return true
 		}

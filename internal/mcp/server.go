@@ -162,7 +162,7 @@ func (s *MCPServer) handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, arg
 	s.crawlJobs[jobID] = job
 
 	// Start the crawl in a goroutine
-	go s.performCrawl(job, maxDepth, maxPages)
+	go s.performCrawl(ctx, job, maxDepth, maxPages)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -174,12 +174,21 @@ func (s *MCPServer) handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, arg
 }
 
 // performCrawl performs the actual crawling
-func (s *MCPServer) performCrawl(job *CrawlJob, maxDepth, maxPages int) {
+func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, maxPages int) {
 	job.Status = "running"
 
 	// TODO: Implement actual crawling logic
 	// For now, we'll simulate progress
 	for i := 0; i < maxPages; i++ {
+		select {
+		case <-ctx.Done():
+			job.Status = "failed"
+			job.Error = "crawl canceled"
+			now := time.Now()
+			job.EndTime = &now
+			return
+		default:
+		}
 		time.Sleep(1 * time.Second)
 		job.Progress = i + 1
 

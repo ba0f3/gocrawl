@@ -61,19 +61,18 @@ func IsNoise(sel *goquery.Selection) bool {
 	}
 	if class, ok := sel.Attr("class"); ok {
 		lc := strings.ToLower(class)
-		for _, tok := range strings.Fields(class) {
-			low := strings.ToLower(tok)
-			if _, hit := noiseClassesExact[low]; hit {
+		for _, tok := range strings.Fields(lc) {
+			if _, hit := noiseClassesExact[tok]; hit {
 				return true
 			}
-			if strings.HasPrefix(low, "footer") || strings.HasPrefix(low, "header-") || strings.HasPrefix(low, "nav-") {
+			if strings.HasPrefix(tok, "footer") || strings.HasPrefix(tok, "header-") || strings.HasPrefix(tok, "nav-") {
 				return true
 			}
 		}
-		if isAdClass(class) {
+		if isAdClass(lc) {
 			return true
 		}
-		if hasNoiseClassPattern(class) {
+		if hasNoiseClassPattern(lc) {
 			return true
 		}
 		for _, p := range cookieConsentIDPrefixes {
@@ -121,9 +120,8 @@ func isStructuralID(id string) bool {
 
 func isAdClass(class string) bool {
 	for _, tok := range strings.Fields(class) {
-		t := strings.ToLower(tok)
-		if t == "ad" || strings.HasPrefix(t, "ad-") || strings.HasPrefix(t, "ad_") ||
-			strings.HasSuffix(t, "-ad") || strings.HasSuffix(t, "_ad") {
+		if tok == "ad" || strings.HasPrefix(tok, "ad-") || strings.HasPrefix(tok, "ad_") ||
+			strings.HasSuffix(tok, "-ad") || strings.HasSuffix(tok, "_ad") {
 			return true
 		}
 	}
@@ -138,14 +136,13 @@ var longNoisePatterns = []string{
 var shortNoisePatterns = []string{"nav", "top", "side", "menu", "widget", "header", "footer"}
 
 func hasNoiseClassPattern(class string) bool {
-	lower := strings.ToLower(class)
 	for _, p := range longNoisePatterns {
-		if strings.Contains(lower, p) {
+		if strings.Contains(class, p) {
 			return true
 		}
 	}
 	for _, tok := range strings.Fields(class) {
-		t := strings.ToLower(tok)
+		t := tok
 		if idx := strings.LastIndex(t, ":"); idx >= 0 {
 			t = t[idx+1:]
 		}
