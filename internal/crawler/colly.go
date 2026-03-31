@@ -55,22 +55,38 @@ func wantsFormat(req *ScrapeRequest, format string) bool {
 	return contains(req.Formats, format)
 }
 
-func finalizeScrape(req *ScrapeRequest, cfg *config.Config, timeout time.Duration, result *ScrapeResult, visitErr error, pageBody []byte) (*ScrapeResult, error) {
-	if cfg != nil && ChromedpConfigured(cfg) && cfg.Crawler.ChromedpAutoFallback {
-		if ok, why := ShouldChromedpFallback(visitErr, result, EffectiveOnlyMainContent(req), cfg.Crawler.ChromedpFallbackStatusCodes, pageBody); ok {
-			html, err := ScrapeHTMLViaChromedp(cfg, req, timeout)
+// ScrapeContext encapsulates the state of a scrape for finalization and fallback logic.
+type ScrapeContext struct {
+	Request  *ScrapeRequest
+	Config   *config.Config
+	Timeout  time.Duration
+	Result   *ScrapeResult
+	VisitErr error
+	PageBody []byte
+}
+
+func finalizeScrape(ctx *ScrapeContext) (*ScrapeResult, error) {
+	if ctx.Config != nil && ChromedpConfigured(ctx.Config) && ctx.Config.Crawler.ChromedpAutoFallback {
+		if ok, why := ShouldChromedpFallback(&FallbackCriteria{
+			VisitErr:    ctx.VisitErr,
+			Result:      ctx.Result,
+			OnlyMain:    EffectiveOnlyMainContent(ctx.Request),
+			StatusCodes: ctx.Config.Crawler.ChromedpFallbackStatusCodes,
+			PageBody:    ctx.PageBody,
+		}); ok {
+			html, err := ScrapeHTMLViaChromedp(ctx.Config, ctx.Request, ctx.Timeout)
 			if err == nil {
-				r := buildResultFromMainHTML(html, req)
+				r := buildResultFromMainHTML(html, ctx.Request)
 				r.Metadata["extractor"] = "chromedp"
 				r.Metadata["chromedpTrigger"] = why
 				return r, nil
 			}
 		}
 	}
-	if visitErr != nil {
-		return nil, visitErr
+	if ctx.VisitErr != nil {
+		return nil, ctx.VisitErr
 	}
-	return result, nil
+	return ctx.Result, nil
 }
 
 func scrapeViaChromedpOnly(req *ScrapeRequest, cfg *config.Config, timeout time.Duration) (*ScrapeResult, error) {
@@ -276,7 +292,14 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 	})
 
 	visitErr := c.Visit(req.URL)
-	return finalizeScrape(req, cfg, timeout, result, visitErr, pageBody)
+	return finalizeScrape(&ScrapeContext{
+		Request:  req,
+		Config:   cfg,
+		Timeout:  timeout,
+		Result:   result,
+		VisitErr: visitErr,
+		PageBody: pageBody,
+	})
 }
 
 func contains(slice []string, item string) bool {

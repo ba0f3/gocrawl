@@ -38,23 +38,31 @@ var challengeHTMLMarkers = []string{
 	"ray id",
 }
 
+// FallbackCriteria encapsulates the input for ShouldChromedpFallback heuristics.
+type FallbackCriteria struct {
+	VisitErr    error
+	Result      *ScrapeResult
+	OnlyMain    bool
+	StatusCodes []int
+	PageBody    []byte
+}
+
 // ShouldChromedpFallback reports whether automatic chromedp retry is warranted and a short tag for metadata.
-// statusCodes may be nil to use DefaultChromedpFallbackStatusCodes().
-func ShouldChromedpFallback(visitErr error, result *ScrapeResult, onlyMain bool, statusCodes []int, pageBody []byte) (bool, string) {
-	if visitErr != nil {
+func ShouldChromedpFallback(fc *FallbackCriteria) (bool, string) {
+	if fc.VisitErr != nil {
 		return true, "visit_error"
 	}
-	if result == nil {
+	if fc.Result == nil {
 		return true, "nil_result"
 	}
-	if errMsg := result.Metadata["error"]; errMsg != "" {
+	if errMsg := fc.Result.Metadata["error"]; errMsg != "" {
 		return true, "colly_error"
 	}
-	codes := statusCodes
+	codes := fc.StatusCodes
 	if len(codes) == 0 {
 		codes = DefaultChromedpFallbackStatusCodes()
 	}
-	if codeStr := result.Metadata["statusCode"]; codeStr != "" {
+	if codeStr := fc.Result.Metadata["statusCode"]; codeStr != "" {
 		if code, err := strconv.Atoi(codeStr); err == nil {
 			for _, c := range codes {
 				if c == code {
@@ -63,18 +71,18 @@ func ShouldChromedpFallback(visitErr error, result *ScrapeResult, onlyMain bool,
 			}
 		}
 	}
-	sample := htmlSampleForHeuristics(result, pageBody)
+	sample := htmlSampleForHeuristics(fc.Result, fc.PageBody)
 	if looksLikeChallengePage(sample) {
 		return true, "challenge_html"
 	}
-	htmlForCSR := string(pageBody)
+	htmlForCSR := string(fc.PageBody)
 	if htmlForCSR == "" {
 		htmlForCSR = sample
 	}
 	if tag, ok := detectCSRFrameworkOrSPAShell(htmlForCSR); ok {
 		return true, tag
 	}
-	if onlyMain && len([]rune(strings.TrimSpace(result.Markdown))) < minMainMarkdownRunes {
+	if fc.OnlyMain && len([]rune(strings.TrimSpace(fc.Result.Markdown))) < minMainMarkdownRunes {
 		return true, "thin_markdown"
 	}
 	return false, ""
