@@ -65,16 +65,22 @@ func (cm *CrawlManager) workerLoop(id int) {
 	}
 }
 
-func (cm *CrawlManager) failJob(jobID, msg string) {
+func (cm *CrawlManager) updateJob(jobID string, action string, updateFn func(*db.CrawlJob)) {
 	job, err := cm.store.GetCrawlJob(jobID)
 	if err != nil {
-		log.Printf("failJob: get job: %v", err)
+		log.Printf("Error retrieving crawl job for %s: %v", action, err)
 		return
 	}
-	job.Status = "failed"
+	updateFn(job)
 	if err := cm.store.UpdateCrawlJob(job); err != nil {
-		log.Printf("failJob: update: %v", err)
+		log.Printf("Error updating crawl job %s: %v", action, err)
 	}
+}
+
+func (cm *CrawlManager) failJob(jobID, msg string) {
+	cm.updateJob(jobID, "fail", func(job *db.CrawlJob) {
+		job.Status = "failed"
+	})
 	log.Printf("job %s failed: %s", jobID, msg)
 }
 
@@ -124,28 +130,16 @@ func (cm *CrawlManager) runCrawlJob(jobID string, req *CrawlRequestBody) {
 }
 
 func (cm *CrawlManager) updateCrawlStatus(jobID string, status string, completed int) {
-	job, err := cm.store.GetCrawlJob(jobID)
-	if err != nil {
-		log.Printf("Error retrieving crawl job for status update: %v", err)
-		return
-	}
-	job.Status = status
-	job.Completed = completed
-	if err := cm.store.UpdateCrawlJob(job); err != nil {
-		log.Printf("Error updating crawl job status: %v", err)
-	}
+	cm.updateJob(jobID, "status update", func(job *db.CrawlJob) {
+		job.Status = status
+		job.Completed = completed
+	})
 }
 
 func (cm *CrawlManager) updateCrawlTotal(jobID string, total int) {
-	job, err := cm.store.GetCrawlJob(jobID)
-	if err != nil {
-		log.Printf("Error retrieving crawl job for total update: %v", err)
-		return
-	}
-	job.Total = total
-	if err := cm.store.UpdateCrawlJob(job); err != nil {
-		log.Printf("Error updating crawl job total: %v", err)
-	}
+	cm.updateJob(jobID, "total update", func(job *db.CrawlJob) {
+		job.Total = total
+	})
 }
 
 // linkInArticleOrMain is true when the anchor sits under common article/main containers.
