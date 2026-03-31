@@ -294,6 +294,38 @@ func (s *MongoStore) CreateCrawlResult(result *CrawlResult) error {
 	return err
 }
 
+func (s *MongoStore) CreateCrawlResults(results []*CrawlResult) error {
+	if len(results) == 0 {
+		return nil
+	}
+
+	docs := make([]interface{}, 0, len(results))
+	for _, result := range results {
+		result.CreatedAt = time.Now()
+		oid := primitive.NewObjectID()
+		if result.ID != "" {
+			if parsed, err := primitive.ObjectIDFromHex(result.ID); err == nil {
+				oid = parsed
+			}
+		}
+		result.ID = oid.Hex()
+		docs = append(docs, bson.M{
+			"_id":       oid,
+			"jobId":     result.JobID,
+			"url":       result.URL,
+			"markdown":  result.Markdown,
+			"html":      result.HTML,
+			"rawHtml":   result.RawHTML,
+			"links":     result.Links,
+			"metadata":  result.Metadata,
+			"createdAt": result.CreatedAt,
+		})
+	}
+
+	_, err := s.db.Collection("crawl_results").InsertMany(context.Background(), docs)
+	return err
+}
+
 func (s *MongoStore) GetCrawlResults(jobID string) ([]*CrawlResult, error) {
 	cursor, err := s.db.Collection("crawl_results").Find(context.Background(), bson.M{"jobId": jobID})
 	if err != nil {

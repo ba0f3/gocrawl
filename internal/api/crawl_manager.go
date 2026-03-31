@@ -95,8 +95,12 @@ func (cm *CrawlManager) runCrawlJob(jobID string, req *CrawlRequestBody) {
 
 	cm.updateCrawlTotal(jobID, len(results))
 
+	// ⚡ Bolt Optimization: Batch insert crawl results to prevent N+1 query problems.
+	// Previously, each result was saved to the database one at a time, which caused severe performance degradation
+	// for large crawl jobs due to excessive database round trips.
+	crawlResults := make([]*db.CrawlResult, 0, len(results))
 	for _, result := range results {
-		cr := db.CrawlResult{
+		cr := &db.CrawlResult{
 			JobID:    jobID,
 			URL:      result.Metadata["sourceURL"],
 			Markdown: result.Markdown,
@@ -105,8 +109,12 @@ func (cm *CrawlManager) runCrawlJob(jobID string, req *CrawlRequestBody) {
 			Links:    result.Links,
 			Metadata: result.Metadata,
 		}
-		if err := cm.store.CreateCrawlResult(&cr); err != nil {
-			log.Printf("Error saving crawl result: %v", err)
+		crawlResults = append(crawlResults, cr)
+	}
+
+	if len(crawlResults) > 0 {
+		if err := cm.store.CreateCrawlResults(crawlResults); err != nil {
+			log.Printf("Error saving crawl results batch: %v", err)
 		}
 	}
 
