@@ -138,6 +138,35 @@ func (s *GormStore) CreateUser(user *User) error {
 	return s.db.Create(&row).Error
 }
 
+func (s *GormStore) CreateCrawlResults(results []*CrawlResult) error {
+	if len(results) == 0 {
+		return nil
+	}
+
+	rows := make([]gormCrawlResultRow, 0, len(results))
+	for _, result := range results {
+		result.CreatedAt = time.Now()
+		if result.ID == "" {
+			result.ID = uuid.New().String()
+		}
+		linksB, _ := json.Marshal(result.Links)
+		metaB, _ := json.Marshal(result.Metadata)
+		rows = append(rows, gormCrawlResultRow{
+			ID:        result.ID,
+			JobID:     result.JobID,
+			URL:       result.URL,
+			Markdown:  result.Markdown,
+			HTML:      result.HTML,
+			RawHTML:   result.RawHTML,
+			LinksJSON: string(linksB),
+			MetaJSON:  string(metaB),
+			CreatedAt: result.CreatedAt,
+		})
+	}
+
+	return s.db.CreateInBatches(rows, 100).Error
+}
+
 func randomID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
