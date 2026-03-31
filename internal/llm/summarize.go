@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sync"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 
 // Matches <think>...</think> blocks emitted by some models before the final answer.
 var thinkingTagRE = regexp.MustCompile(`(?is)<think\b[^>]*>[\s\S]*?</think>`)
+var wsRE = regexp.MustCompile(`\s+`)
+var clientCache sync.Map
 
 // SummarizeMarkdown calls an OpenAI-compatible chat completions API (webclaw-style prompt).
 func SummarizeMarkdown(ctx context.Context, cfg *config.Config, model, markdown string, maxSentences int) (string, error) {
@@ -61,7 +64,7 @@ func SummarizeMarkdown(ctx context.Context, cfg *config.Config, model, markdown 
 	if timeout == 0 {
 		timeout = 120 * time.Second
 	}
-	client := &http.Client{Timeout: timeout}
+	client := getHTTPClient(timeout)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
@@ -92,5 +95,16 @@ func SummarizeMarkdown(ctx context.Context, cfg *config.Config, model, markdown 
 }
 
 func stripThinkingTags(s string) string {
-	return strings.TrimSpace(thinkingTagRE.ReplaceAllString(s, ""))
+	s = thinkingTagRE.ReplaceAllString(s, " ")
+	s = wsRE.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
+}
+
+func getHTTPClient(timeout time.Duration) *http.Client {
+	if c, ok := clientCache.Load(timeout); ok {
+		return c.(*http.Client)
+	}
+	c := &http.Client{Timeout: timeout}
+	actual, _ := clientCache.LoadOrStore(timeout, c)
+	return actual.(*http.Client)
 }

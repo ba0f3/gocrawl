@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -173,8 +174,12 @@ func ExtractJsDataFromHTML(html string) []JsDataBlob {
 		if time.Now().After(deadline) {
 			break
 		}
-		_, _ = vm.RunString(script)
-		_, _ = vm.RunString(jsevalDrainTimers)
+		if err := runWithDeadline(vm, script, deadline); err != nil {
+			break
+		}
+		if err := runWithDeadline(vm, jsevalDrainTimers, deadline); err != nil {
+			break
+		}
 	}
 	v, err := vm.RunString(jsevalScan)
 	if err != nil {
@@ -186,6 +191,33 @@ func ExtractJsDataFromHTML(html string) []JsDataBlob {
 		return nil
 	}
 	return blobs
+}
+
+func runWithDeadline(vm *goja.Runtime, script string, deadline time.Time) error {
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return fmt.Errorf("execution timeout")
+	}
+	done := make(chan struct{})
+	timer := time.NewTimer(remaining)
+	defer func() {
+		close(done)
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+	}()
+	go func() {
+		select {
+		case <-timer.C:
+			vm.Interrupt(fmt.Errorf("execution timeout"))
+		case <-done:
+		}
+	}()
+	_, err := vm.RunString(script)
+	return err
 }
 
 // ExtractReadableTextFromBlobs walks JSON blobs and builds a markdown section (webclaw-style).

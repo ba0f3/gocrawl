@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -227,7 +228,7 @@ func (cm *CrawlManager) performCrawling(req *CrawlRequestBody, jobID string) []*
 			scrapeOpts.LinkSelector = strings.Join(crawlSels, ", ")
 		}
 
-		result, err := crawler.ScrapeURL(&scrapeOpts, cm.cfg)
+		result, err := crawler.ScrapeURLWithContext(context.Background(), &scrapeOpts, cm.cfg)
 		if err != nil {
 			log.Printf("Error scraping page %s: %v", r.Request.URL, err)
 			return

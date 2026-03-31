@@ -60,6 +60,7 @@ func IsNoise(sel *goquery.Selection) bool {
 		}
 	}
 	if class, ok := sel.Attr("class"); ok {
+		lc := strings.ToLower(class)
 		for _, tok := range strings.Fields(class) {
 			low := strings.ToLower(tok)
 			if _, hit := noiseClassesExact[low]; hit {
@@ -76,7 +77,7 @@ func IsNoise(sel *goquery.Selection) bool {
 			return true
 		}
 		for _, p := range cookieConsentIDPrefixes {
-			if strings.Contains(strings.ToLower(class), p) {
+			if strings.Contains(lc, p) {
 				return true
 			}
 		}

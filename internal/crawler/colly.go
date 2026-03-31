@@ -71,7 +71,7 @@ func wantsFormat(req *ScrapeRequest, format string) bool {
 	return contains(req.Formats, format)
 }
 
-func finalizeScrape(req *ScrapeRequest, cfg *config.Config, timeout time.Duration, result *ScrapeResult, visitErr error, pageBody []byte) (*ScrapeResult, error) {
+func finalizeScrape(ctx context.Context, req *ScrapeRequest, cfg *config.Config, timeout time.Duration, result *ScrapeResult, visitErr error, pageBody []byte) (*ScrapeResult, error) {
 	if cfg != nil && ChromedpConfigured(cfg) && cfg.Crawler.ChromedpAutoFallback {
 		if ok, why := ShouldChromedpFallback(visitErr, result, EffectiveOnlyMainContent(req), cfg.Crawler.ChromedpFallbackStatusCodes, pageBody); ok {
 			html, err := ScrapeHTMLViaChromedp(cfg, req, timeout)
@@ -79,7 +79,7 @@ func finalizeScrape(req *ScrapeRequest, cfg *config.Config, timeout time.Duratio
 				html, doc := refineChromedpHTML(html, req)
 				r := buildResultFromMainHTMLWithDoc(html, req, doc)
 				applyJsExtract(req, []byte(html), r)
-				summarizeResult(req, cfg, r)
+				summarizeResult(ctx, req, cfg, r)
 				r.Metadata["extractor"] = "chromedp"
 				r.Metadata["chromedpTrigger"] = why
 				return r, nil
@@ -92,7 +92,7 @@ func finalizeScrape(req *ScrapeRequest, cfg *config.Config, timeout time.Duratio
 	return result, nil
 }
 
-func scrapeViaChromedpOnly(req *ScrapeRequest, cfg *config.Config, timeout time.Duration) (*ScrapeResult, error) {
+func scrapeViaChromedpOnly(ctx context.Context, req *ScrapeRequest, cfg *config.Config, timeout time.Duration) (*ScrapeResult, error) {
 	if !ChromedpConfigured(cfg) {
 		return nil, fmt.Errorf("forceBrowser requires LIGHTPANDA_WS_URL or LIGHTPANDA_HTTP_URL")
 	}
@@ -103,13 +103,13 @@ func scrapeViaChromedpOnly(req *ScrapeRequest, cfg *config.Config, timeout time.
 	html, doc := refineChromedpHTML(html, req)
 	r := buildResultFromMainHTMLWithDoc(html, req, doc)
 	applyJsExtract(req, []byte(html), r)
-	summarizeResult(req, cfg, r)
+	summarizeResult(ctx, req, cfg, r)
 	r.Metadata["extractor"] = "chromedp"
 	r.Metadata["chromedpTrigger"] = "force_browser"
 	return r, nil
 }
 
-func summarizeResult(req *ScrapeRequest, cfg *config.Config, result *ScrapeResult) {
+func summarizeResult(ctx context.Context, req *ScrapeRequest, cfg *config.Config, result *ScrapeResult) {
 	if cfg == nil || result == nil || req == nil {
 		return
 	}
@@ -131,7 +131,10 @@ func summarizeResult(req *ScrapeRequest, cfg *config.Config, result *ScrapeResul
 	if model == "" {
 		model = cfg.LLM.Model
 	}
-	s, err := llm.SummarizeMarkdown(context.Background(), cfg, model, md, n)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s, err := llm.SummarizeMarkdown(ctx, cfg, model, md, n)
 	if err != nil {
 		log.Printf("summarize: %v", err)
 		return
@@ -257,6 +260,10 @@ const maxPageBodyCopy = 2 << 20 // cap bytes copied for CSR/challenge heuristics
 
 // ScrapeURL scrapes a specific URL and extracts the main content
 func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
+	return ScrapeURLWithContext(context.Background(), req, cfg)
+}
+
+func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 	timeout := 30 * time.Second
 	if req.Timeout > 0 {
 		timeout = time.Duration(req.Timeout) * time.Second
@@ -265,7 +272,7 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 	}
 
 	if req != nil && req.ForceBrowser {
-		return scrapeViaChromedpOnly(req, cfg, timeout)
+		return scrapeViaChromedpOnly(ctx, req, cfg, timeout)
 	}
 
 	c := colly.NewCollector(
@@ -347,8 +354,8 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 	})
 
 	visitErr := c.Visit(req.URL)
-	res, err := finalizeScrape(req, cfg, timeout, result, visitErr, pageBody)
-	summarizeResult(req, cfg, res)
+	res, err := finalizeScrape(ctx, req, cfg, timeout, result, visitErr, pageBody)
+	summarizeResult(ctx, req, cfg, res)
 	return res, err
 }
 

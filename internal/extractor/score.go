@@ -19,7 +19,7 @@ func findBestCandidate(doc *goquery.Document, exclude map[*html.Node]struct{}) *
 		if n == nil || isExcluded(n, exclude) {
 			return
 		}
-		if IsNoise(s) || hasNoiseAncestor(s) || isUnderExcluded(s, exclude) {
+		if IsNoise(s) || IsNoiseDescendant(s) || isUnderExcluded(s, exclude) {
 			return
 		}
 		sc := scoreNode(s)
@@ -29,15 +29,6 @@ func findBestCandidate(doc *goquery.Document, exclude map[*html.Node]struct{}) *
 		}
 	})
 	return best
-}
-
-func hasNoiseAncestor(sel *goquery.Selection) bool {
-	for p := sel.Parent(); p.Length() > 0; p = p.Parent() {
-		if IsNoise(p) {
-			return true
-		}
-	}
-	return false
 }
 
 func isUnderExcluded(sel *goquery.Selection, exclude map[*html.Node]struct{}) bool {

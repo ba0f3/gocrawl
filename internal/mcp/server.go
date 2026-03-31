@@ -109,7 +109,7 @@ func (s *MCPServer) handleScrape(ctx context.Context, _ *mcp.CallToolRequest, ar
 	}
 
 	// Perform the scrape
-	result, err := crawler.ScrapeURL(req, s.cfg)
+	result, err := crawler.ScrapeURLWithContext(ctx, req, s.cfg)
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
