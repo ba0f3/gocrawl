@@ -112,7 +112,7 @@ func (h *Handler) Scrape(c *gin.Context) {
 		return
 	}
 
-	result, err := crawler.ScrapeURL(&req, h.Cfg)
+	result, err := crawler.ScrapeURLWithContext(c.Request.Context(), &req, h.Cfg)
 	if err != nil {
 		writeJSON(c, http.StatusInternalServerError, nil, err)
 		return
@@ -301,7 +301,7 @@ func (h *Handler) SSEScrape(c *gin.Context) {
 			scrapeReq.Timeout = 30
 		}
 
-		result, err := crawler.ScrapeURL(&scrapeReq, h.Cfg)
+		result, err := crawler.ScrapeURLWithContext(req.Context(), &scrapeReq, h.Cfg)
 		if err != nil {
 			log.Printf("Error scraping URL: %v", err)
 			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": err.Error()}}
@@ -379,7 +379,7 @@ func (h *Handler) MCPScrape(c *gin.Context) {
 		return
 	}
 
-	result, err := crawler.ScrapeURL(&req, h.Cfg)
+	result, err := crawler.ScrapeURLWithContext(c.Request.Context(), &req, h.Cfg)
 	if err != nil {
 		writeJSON(c, http.StatusInternalServerError, nil, err)
 		return

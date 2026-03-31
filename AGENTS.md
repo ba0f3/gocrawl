@@ -15,9 +15,10 @@ This file orients automated coding agents and contributors to the **gocrawl** re
 |------|------|
 | `cmd/main.go` | Wiring: config, DB init, Gin engine, `http.Server` timeouts, graceful shutdown. |
 | `internal/api/` | Gin routes (`router.go`), handlers, crawl manager, middleware (auth, CORS, logging, rate limit). |
-| `internal/config/` | `config.Load()` and env-backed structs (server, database, security, crawler, retention, rate limits, SSE). |
-| `internal/crawler/` | Colly-based crawl/scrape execution; chromedp remote (Lightpanda) with auto fallback and `forceBrowser` (see `README.md` / `LIGHTPANDA_*`, `CHROMEDP_*`). |
-| `internal/extractor/` | HTML → Markdown and related extraction. |
+| `internal/config/` | `config.Load()` and env-backed structs (server, database, security, crawler, LLM, retention, rate limits, SSE). |
+| `internal/crawler/` | Colly-based crawl/scrape execution; optional uTLS Chrome transport (`ENABLE_CHROME_TLS`); chromedp remote (Lightpanda) with auto fallback and `forceBrowser` (see `README.md` / `LIGHTPANDA_*`, `CHROMEDP_*`). |
+| `internal/extractor/` | HTML → Markdown; webclaw-style main extraction (noise, scoring, excludes); optional goja JS blob extraction (`extractJsData`). |
+| `internal/llm/` | OpenAI-compatible chat completions for optional scrape summaries (`LLM_*`, `summarize` on scrape body). |
 | `internal/db/` | `Store` interface; Mongo and GORM (Postgres/SQLite) implementations, indexes, cleanup routine. |
 | `internal/user/` | Registration, login, API keys. |
 | `internal/mcp/` | MCP-related server/SSE integration used by the API layer. |

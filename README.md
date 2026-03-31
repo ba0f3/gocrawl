@@ -10,6 +10,7 @@ A production-grade Go web crawler that provides a Firecrawl-compatible API for w
 - Optional user authentication with API keys
 - REST API under `/v1` (Firecrawl-style)
 - Optional HTTP rate limiting, crawl retries, and chromedp/Lightpanda (auto fallback for CSR, HTTP 401/403/429/503, challenge pages, or `forceBrowser`)
+- Optional **Chrome-like TLS** (uTLS) for Colly fetches (`ENABLE_CHROME_TLS`), **webclaw-style** main-content extraction (noise/scoring), optional **inline JS data** extraction via goja (`extractJsData`), and optional **LLM summaries** (OpenAI-compatible API)
 - Automatic data cleanup and crawl job progress tracking
 
 ## Quick start (Docker / GHCR)
@@ -190,6 +191,12 @@ Environment variables can be set in the `.env` file or as system environment var
 | `CRAWL_TIMEOUT` | Default per-request timeout (e.g. `30s`) |
 | `USER_AGENT` | User-Agent for Colly and chromedp |
 | `CRAWL_MAX_RETRIES` | HTTP retries for 429/5xx (default: `3`) |
+| `ENABLE_CHROME_TLS` | When `true`, Colly uses uTLS with a Chrome TLS fingerprint (HTTP/2 via ALPN). Default User-Agent becomes a Chrome string unless you set `USER_AGENT` explicitly. Default `false` |
+| `LLM_ENABLED` | When `true`, allows `summarize: true` on scrape requests (requires `LLM_BASE_URL` and `LLM_MODEL`) |
+| `LLM_BASE_URL` | OpenAI-compatible API root (no trailing slash; e.g. `http://host:11434/v1` for Ollama) |
+| `LLM_API_KEY` | Optional bearer token for the LLM API |
+| `LLM_MODEL` | Default model id for summaries (e.g. `qwen2.5:7b`, `gpt-oss-20b`) |
+| `LLM_TIMEOUT` | HTTP client timeout for LLM calls (default `120s`) |
 | `LIGHTPANDA_WS_URL` | Optional full CDP WebSocket URL (e.g. from `GET http://host:9222/json/version` → `webSocketDebuggerUrl`) |
 | `LIGHTPANDA_HTTP_URL` | Optional HTTP base (e.g. `http://lightpanda:9222`); first chromedp use resolves and caches `webSocketDebuggerUrl` |
 | `CHROMEDP_AUTO_FALLBACK` | When `true` (default), automatically use chromedp after Colly when heuristics match (thin main text, SPA shell, challenge HTML, configured status codes, errors). Set `false` to only use chromedp with JSON `forceBrowser: true` |
@@ -240,6 +247,10 @@ export BASE_URL="http://localhost:8151"
 | Content root | `contentSelectors` | More selectors, tried in order after `contentSelector`. |
 | Links list | `linkSelector` | Optional. **Omitted:** collect links only inside the same DOM subtree as the extracted content (e.g. only under `<article>` when that block is used for markdown), with **URLs de-duplicated**. **Set:** run this selector against the **full page** (e.g. `a[href]` for every anchor on the page). |
 | Browser-only | `forceBrowser` | When `true` and `LIGHTPANDA_WS_URL` or `LIGHTPANDA_HTTP_URL` is set, **skips the Colly HTTP fetch** and loads the page with chromedp only. Metadata includes `chromedpTrigger: force_browser`. |
+| Exclusions | `excludeSelectors` | CSS selectors; matching subtrees are excluded from **scored** main-content extraction (webclaw-style). |
+| Advanced extraction | `useAdvancedExtractor` | Default follows `onlyMainContent`: when main-content mode is on, uses noise/scoring extraction; set `false` for legacy selector-only behavior. |
+| JS blobs | `extractJsData` | When `true`, runs inline scripts in a sandbox (goja), collects large `window.__*` JSON blobs (e.g. Next.js `__next_f`), and appends a `## Additional Content` markdown section. Metadata may include `jsExtracted`, `jsBlobCount`. |
+| LLM summary | `summarize` | When `true` and `LLM_*` env is configured, adds a plain-text `summary` field (default sentence count `3`). Optional: `summaryMaxSentences`, `summaryModel` (overrides `LLM_MODEL`). Failures are logged and do not fail the scrape. |
 
 If `contentSelector` or `contentSelectors` are set, they **replace** the built-in main-content list (`main`, `article`, …). If no selector matches, the extractor falls back to `body`. `onlyMainContent` applies only when you do **not** set custom content selectors.
 
