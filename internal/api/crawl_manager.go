@@ -267,7 +267,9 @@ func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, r
 		visited[absURL] = true
 		if len(visited) <= req.Limit {
 			mu.Unlock()
-			_ = e.Request.Visit(absURL)
+			if err := e.Request.Visit(absURL); err != nil {
+				log.Printf("Failed to visit %s: %v", absURL, err)
+			}
 			return
 		}
 	}
