@@ -178,7 +178,7 @@ func (cm *CrawlManager) performCrawling(req *CrawlRequestBody, jobID string) []*
 		Delay:       time.Duration(delayMs) * time.Millisecond,
 	})
 
-	if t := crawler.NewRetryTransport(cm.cfg); t != nil {
+	if t := crawler.TransportForCrawler(cm.cfg); t != nil {
 		c.WithTransport(t)
 	}
 

@@ -1,7 +1,9 @@
 package crawler
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -9,6 +11,7 @@ import (
 
 	"gocrawl/internal/config"
 	"gocrawl/internal/extractor"
+	"gocrawl/internal/llm"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly/v2"
@@ -22,6 +25,7 @@ type ScrapeResult struct {
 	HTML     string            `json:"html,omitempty"`
 	RawHTML  string            `json:"rawHtml,omitempty"`
 	Links    []string          `json:"links,omitempty"`
+	Summary  string            `json:"summary,omitempty"`
 	Metadata map[string]string `json:"metadata"`
 }
 
@@ -40,8 +44,20 @@ type ScrapeRequest struct {
 	ContentSelectors []string `json:"contentSelectors,omitempty"`
 	// LinkSelector limits which anchors are collected as links (default "a[href]").
 	LinkSelector string `json:"linkSelector,omitempty"`
+	// ExcludeSelectors are CSS selectors whose subtrees are excluded from scored extraction (webclaw-style).
+	ExcludeSelectors []string `json:"excludeSelectors,omitempty"`
+	// UseAdvancedExtractor: nil defaults to matching onlyMainContent; set false to use legacy selector-only extraction.
+	UseAdvancedExtractor *bool `json:"useAdvancedExtractor,omitempty"`
+	// ExtractJsData runs inline scripts in a sandbox (goja) and appends structured __* blob text (webclaw-style).
+	ExtractJsData bool `json:"extractJsData,omitempty"`
 	// ForceBrowser skips the HTTP fetch and uses chromedp only when LIGHTPANDA_WS_URL or LIGHTPANDA_HTTP_URL is set.
 	ForceBrowser bool `json:"forceBrowser,omitempty"`
+	// Summarize asks the optional LLM layer to add a short plain-text summary (requires LLM_* config).
+	Summarize *bool `json:"summarize,omitempty"`
+	// SummaryMaxSentences caps the LLM summary length (default 3).
+	SummaryMaxSentences int `json:"summaryMaxSentences,omitempty"`
+	// SummaryModel overrides the configured default LLM model for this request.
+	SummaryModel string `json:"summaryModel,omitempty"`
 }
 
 const minMainMarkdownRunes = 80
@@ -60,7 +76,10 @@ func finalizeScrape(req *ScrapeRequest, cfg *config.Config, timeout time.Duratio
 		if ok, why := ShouldChromedpFallback(visitErr, result, EffectiveOnlyMainContent(req), cfg.Crawler.ChromedpFallbackStatusCodes, pageBody); ok {
 			html, err := ScrapeHTMLViaChromedp(cfg, req, timeout)
 			if err == nil {
-				r := buildResultFromMainHTML(html, req)
+				html, doc := refineChromedpHTML(html, req)
+				r := buildResultFromMainHTMLWithDoc(html, req, doc)
+				applyJsExtract(req, []byte(html), r)
+				summarizeResult(req, cfg, r)
 				r.Metadata["extractor"] = "chromedp"
 				r.Metadata["chromedpTrigger"] = why
 				return r, nil
@@ -81,13 +100,53 @@ func scrapeViaChromedpOnly(req *ScrapeRequest, cfg *config.Config, timeout time.
 	if err != nil {
 		return nil, err
 	}
-	r := buildResultFromMainHTML(html, req)
+	html, doc := refineChromedpHTML(html, req)
+	r := buildResultFromMainHTMLWithDoc(html, req, doc)
+	applyJsExtract(req, []byte(html), r)
+	summarizeResult(req, cfg, r)
 	r.Metadata["extractor"] = "chromedp"
 	r.Metadata["chromedpTrigger"] = "force_browser"
 	return r, nil
 }
 
+func summarizeResult(req *ScrapeRequest, cfg *config.Config, result *ScrapeResult) {
+	if cfg == nil || result == nil || req == nil {
+		return
+	}
+	if !cfg.LLM.Enabled || req.Summarize == nil || !*req.Summarize {
+		return
+	}
+	md := result.Markdown
+	if md == "" {
+		return
+	}
+	n := req.SummaryMaxSentences
+	if n <= 0 {
+		n = 3
+	}
+	model := strings.TrimSpace(req.SummaryModel)
+	if model == "" {
+		model = cfg.LLM.Model
+	}
+	s, err := llm.SummarizeMarkdown(context.Background(), cfg, model, md, n)
+	if err != nil {
+		log.Printf("summarize: %v", err)
+		return
+	}
+	result.Summary = strings.TrimSpace(s)
+	if result.Metadata == nil {
+		result.Metadata = make(map[string]string)
+	}
+	if model != "" {
+		result.Metadata["summaryModel"] = model
+	}
+}
+
 func buildResultFromMainHTML(contentHTML string, req *ScrapeRequest) *ScrapeResult {
+	return buildResultFromMainHTMLWithDoc(contentHTML, req, nil)
+}
+
+func buildResultFromMainHTMLWithDoc(contentHTML string, req *ScrapeRequest, fullDoc *goquery.Document) *ScrapeResult {
 	result := &ScrapeResult{
 		Links:    []string{},
 		Metadata: map[string]string{"sourceURL": req.URL},
@@ -109,6 +168,9 @@ func buildResultFromMainHTML(contentHTML string, req *ScrapeRequest) *ScrapeResu
 	if wantsFormat(req, "markdown") {
 		md, err := extractor.ToMarkdown(contentHTML)
 		if err == nil {
+			if fullDoc != nil && EffectiveUseAdvancedExtractor(req) {
+				md = extractor.RecoverMarkdownH1(fullDoc, md)
+			}
 			result.Markdown = md
 		}
 	}
@@ -223,7 +285,7 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 		c.SetProxyFunc(rps)
 	}
 	if cfg != nil {
-		if t := NewRetryTransport(cfg); t != nil {
+		if t := TransportForCrawler(cfg); t != nil {
 			c.WithTransport(t)
 		}
 	}
@@ -251,7 +313,7 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 			result.RawHTML = rawHTML
 		}
 
-		contentHTML, scope := pickContentHTML(e, req)
+		contentHTML, scope, fullDoc := extractContentForScrape(e, req)
 		if wantsFormat(req, "html") {
 			result.HTML = contentHTML
 		}
@@ -261,6 +323,9 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 		if wantsFormat(req, "markdown") {
 			markdown, err := extractor.ToMarkdown(contentHTML)
 			if err == nil {
+				if fullDoc != nil && EffectiveUseAdvancedExtractor(req) {
+					markdown = extractor.RecoverMarkdownH1(fullDoc, markdown)
+				}
 				result.Markdown = markdown
 			}
 		}
@@ -269,6 +334,9 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 		result.Metadata["description"] = e.DOM.Find("meta[name='description']").AttrOr("content", "")
 		result.Metadata["language"] = e.DOM.Find("html").AttrOr("lang", "")
 		result.Metadata["sourceURL"] = req.URL
+		if e.Response != nil {
+			applyJsExtract(req, e.Response.Body, result)
+		}
 	})
 
 	c.OnError(func(r *colly.Response, err error) {
@@ -276,7 +344,9 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 	})
 
 	visitErr := c.Visit(req.URL)
-	return finalizeScrape(req, cfg, timeout, result, visitErr, pageBody)
+	res, err := finalizeScrape(req, cfg, timeout, result, visitErr, pageBody)
+	summarizeResult(req, cfg, res)
+	return res, err
 }
 
 func contains(slice []string, item string) bool {

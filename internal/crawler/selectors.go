@@ -44,6 +44,18 @@ func EffectiveOnlyMainContent(req *ScrapeRequest) bool {
 	return *req.OnlyMainContent
 }
 
+// EffectiveUseAdvancedExtractor enables webclaw-style scoring/noise extraction when true.
+// Default (nil): same as EffectiveOnlyMainContent — advanced on for typical main-content scrapes.
+func EffectiveUseAdvancedExtractor(req *ScrapeRequest) bool {
+	if req == nil {
+		return true
+	}
+	if req.UseAdvancedExtractor != nil {
+		return *req.UseAdvancedExtractor
+	}
+	return EffectiveOnlyMainContent(req)
+}
+
 // EffectiveLinkSelector returns the selector used to discover links on a scrape (default a[href]).
 func EffectiveLinkSelector(req *ScrapeRequest) string {
 	if req == nil {
