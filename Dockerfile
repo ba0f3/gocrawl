@@ -19,7 +19,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -ldflags "-w -s" -o /gocrawl ./cmd/main.go
 
 # Stage 2: Create the final, minimal image
-FROM alpine:latest
+FROM alpine:3.21
 
 # Copy the built binary from the builder stage
 COPY --from=builder /gocrawl /gocrawl
