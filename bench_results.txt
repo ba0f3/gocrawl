@@ -1,0 +1,10 @@
+goos: linux
+goarch: amd64
+pkg: gocrawl/internal/api
+cpu: Intel(R) Xeon(R) Processor @ 2.30GHz
+BenchmarkUpdateCrawlStatus_Nplus1_Memory-4   	 2675587	       440.9 ns/op
+BenchmarkUpdateCrawlStatus_Nplus1_SQLite-4   	    9852	    111471 ns/op
+BenchmarkUpdateJobProgress_Memory-4          	29843270	        35.96 ns/op
+BenchmarkUpdateJobProgress_SQLite-4          	   29479	     40227 ns/op
+PASS
+ok  	gocrawl/internal/api	5.525s

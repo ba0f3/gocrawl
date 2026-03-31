@@ -76,6 +76,18 @@ func (m *MemoryStore) UpdateCrawlJob(job *CrawlJob) error {
 	return nil
 }
 
+func (m *MemoryStore) UpdateJobProgress(jobID string, status string, completed int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	j, ok := m.jobs[jobID]
+	if !ok {
+		return ErrJobNotFound
+	}
+	j.Status = status
+	j.Completed = completed
+	return nil
+}
+
 func (m *MemoryStore) ClaimNextQueuedJob() (*CrawlJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

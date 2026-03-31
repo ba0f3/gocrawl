@@ -123,14 +123,8 @@ func (cm *CrawlManager) runCrawlJob(jobID string, req *CrawlRequestBody) {
 }
 
 func (cm *CrawlManager) updateCrawlStatus(jobID string, status string, completed int) {
-	job, err := cm.store.GetCrawlJob(jobID)
-	if err != nil {
-		log.Printf("Error retrieving crawl job for status update: %v", err)
-		return
-	}
-	job.Status = status
-	job.Completed = completed
-	if err := cm.store.UpdateCrawlJob(job); err != nil {
+	// ⚡ Bolt Optimization: Use targeted single UPDATE query rather than a N+1 pattern of fetching the whole row, mutating it and sending it back over the wire.
+	if err := cm.store.UpdateJobProgress(jobID, status, completed); err != nil {
 		log.Printf("Error updating crawl job status: %v", err)
 	}
 }

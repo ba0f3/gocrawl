@@ -8,8 +8,8 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"sync"
 	"strings"
+	"sync"
 	"time"
 
 	"gocrawl/internal/config"

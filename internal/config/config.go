@@ -55,22 +55,22 @@ type SecurityConfig struct {
 }
 
 type CrawlerConfig struct {
-	MaxConcurrentCrawls int // per-collector parallelism; also used as crawl worker count when CrawlWorkers is 0
-	CrawlWorkers        int // worker goroutines draining the queued crawl job table
-	CrawlTimeout        time.Duration
-	UserAgent           string
-	Proxies             []string
-	EnableProxyRotation bool
-	CrawlMaxRetries     int
-	CrawlRetryBaseDelay time.Duration
-	CrawlMinDelay       time.Duration // minimum delay between requests to the same host (global floor with per-request delay)
-	ChromedpWSURL       string        // e.g. ws://lightpanda:9222/devtools/browser/... — enables JS fallback scrape
-	LightpandaHTTPURL   string        // e.g. http://lightpanda:9222 — resolved to webSocketDebuggerUrl on first use
-	ChromedpMaxConcurrent int         // max concurrent chromedp sessions (default 8 when unset/zero)
-	ChromedpNavWait       time.Duration // sleep after load + settle before hydration polling (SPA paint time)
-	ChromedpLoadWaitTimeout time.Duration // max time to wait for document.readyState === "complete"
-	ChromedpHydrationPollEvery time.Duration
-	ChromedpHydrationMaxPolls    int
+	MaxConcurrentCrawls           int // per-collector parallelism; also used as crawl worker count when CrawlWorkers is 0
+	CrawlWorkers                  int // worker goroutines draining the queued crawl job table
+	CrawlTimeout                  time.Duration
+	UserAgent                     string
+	Proxies                       []string
+	EnableProxyRotation           bool
+	CrawlMaxRetries               int
+	CrawlRetryBaseDelay           time.Duration
+	CrawlMinDelay                 time.Duration // minimum delay between requests to the same host (global floor with per-request delay)
+	ChromedpWSURL                 string        // e.g. ws://lightpanda:9222/devtools/browser/... — enables JS fallback scrape
+	LightpandaHTTPURL             string        // e.g. http://lightpanda:9222 — resolved to webSocketDebuggerUrl on first use
+	ChromedpMaxConcurrent         int           // max concurrent chromedp sessions (default 8 when unset/zero)
+	ChromedpNavWait               time.Duration // sleep after load + settle before hydration polling (SPA paint time)
+	ChromedpLoadWaitTimeout       time.Duration // max time to wait for document.readyState === "complete"
+	ChromedpHydrationPollEvery    time.Duration
+	ChromedpHydrationMaxPolls     int
 	ChromedpHydrationMinTextRunes int
 	ChromedpFallbackStatusCodes   []int // HTTP status codes that trigger chromedp when auto fallback is on
 	ChromedpAutoFallback          bool  // when false, only forceBrowser uses chromedp
@@ -124,22 +124,22 @@ func Load() (*Config, error) {
 			Timeout: viper.GetDuration("LLM_TIMEOUT"),
 		},
 		Crawler: CrawlerConfig{
-			MaxConcurrentCrawls: viper.GetInt("MAX_CONCURRENT_CRAWLS"),
-			CrawlWorkers:        viper.GetInt("CRAWL_WORKERS"),
-			CrawlTimeout:        viper.GetDuration("CRAWL_TIMEOUT"),
-			UserAgent:           viper.GetString("USER_AGENT"),
-			Proxies:             viper.GetStringSlice("PROXIES"),
-			EnableProxyRotation: viper.GetBool("ENABLE_PROXY_ROTATION"),
-			CrawlMaxRetries:     viper.GetInt("CRAWL_MAX_RETRIES"),
-			CrawlRetryBaseDelay: viper.GetDuration("CRAWL_RETRY_BASE_DELAY"),
-			CrawlMinDelay:       viper.GetDuration("CRAWL_MIN_DELAY"),
-			ChromedpWSURL:       viper.GetString("LIGHTPANDA_WS_URL"),
-			LightpandaHTTPURL:   viper.GetString("LIGHTPANDA_HTTP_URL"),
-			ChromedpMaxConcurrent: viper.GetInt("CHROMEDP_MAX_CONCURRENT"),
-			ChromedpNavWait:            viper.GetDuration("CHROMEDP_NAV_WAIT"),
-			ChromedpLoadWaitTimeout:    viper.GetDuration("CHROMEDP_LOAD_WAIT_TIMEOUT"),
-			ChromedpHydrationPollEvery: viper.GetDuration("CHROMEDP_HYDRATION_POLL_INTERVAL"),
-			ChromedpHydrationMaxPolls:    viper.GetInt("CHROMEDP_HYDRATION_MAX_POLLS"),
+			MaxConcurrentCrawls:           viper.GetInt("MAX_CONCURRENT_CRAWLS"),
+			CrawlWorkers:                  viper.GetInt("CRAWL_WORKERS"),
+			CrawlTimeout:                  viper.GetDuration("CRAWL_TIMEOUT"),
+			UserAgent:                     viper.GetString("USER_AGENT"),
+			Proxies:                       viper.GetStringSlice("PROXIES"),
+			EnableProxyRotation:           viper.GetBool("ENABLE_PROXY_ROTATION"),
+			CrawlMaxRetries:               viper.GetInt("CRAWL_MAX_RETRIES"),
+			CrawlRetryBaseDelay:           viper.GetDuration("CRAWL_RETRY_BASE_DELAY"),
+			CrawlMinDelay:                 viper.GetDuration("CRAWL_MIN_DELAY"),
+			ChromedpWSURL:                 viper.GetString("LIGHTPANDA_WS_URL"),
+			LightpandaHTTPURL:             viper.GetString("LIGHTPANDA_HTTP_URL"),
+			ChromedpMaxConcurrent:         viper.GetInt("CHROMEDP_MAX_CONCURRENT"),
+			ChromedpNavWait:               viper.GetDuration("CHROMEDP_NAV_WAIT"),
+			ChromedpLoadWaitTimeout:       viper.GetDuration("CHROMEDP_LOAD_WAIT_TIMEOUT"),
+			ChromedpHydrationPollEvery:    viper.GetDuration("CHROMEDP_HYDRATION_POLL_INTERVAL"),
+			ChromedpHydrationMaxPolls:     viper.GetInt("CHROMEDP_HYDRATION_MAX_POLLS"),
 			ChromedpHydrationMinTextRunes: viper.GetInt("CHROMEDP_HYDRATION_MIN_TEXT_RUNES"),
 			ChromedpAutoFallback:          true,
 			EnableChromeTLS:               viper.GetBool("ENABLE_CHROME_TLS"),

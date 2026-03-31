@@ -1,0 +1,1 @@
+- Use targeted UPDATE statements (like UpdateJobProgress) instead of fetching the entire row, modifying it, and saving it back to avoid N+1 query patterns and save database roundtrips.
