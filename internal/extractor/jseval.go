@@ -129,6 +129,7 @@ const jsevalDrainTimers = `
 
 var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
 var errExecutionTimeout = errors.New("execution timeout")
+const maxExtractedTextBytes = 256 * 1024
 
 var classicScriptTypes = map[string]struct{}{
 	"":                       {},
@@ -244,6 +245,8 @@ func runValueWithDeadline(vm *goja.Runtime, script string, deadline time.Time) (
 		case <-done:
 		}
 	}()
+	// Clear any stale interrupt before executing the next script.
+	vm.ClearInterrupt()
 	v, err := vm.RunString(script)
 	return v, err
 }
@@ -265,12 +268,40 @@ func ExtractReadableTextFromBlobs(blobs []JsDataBlob) string {
 	}
 	seen := make(map[string]struct{})
 	var texts []string
+	accumulatedBytes := 0
+	appendWithinCap := func(t string) bool {
+		if t == "" {
+			return false
+		}
+		if _, ok := seen[t]; ok {
+			return false
+		}
+		remaining := maxExtractedTextBytes - accumulatedBytes
+		if remaining <= 0 {
+			return true
+		}
+		if len(t) > remaining {
+			// Stop further growth once the budget is reached.
+			tr := strings.TrimSpace(t[:remaining])
+			if tr != "" {
+				seen[tr] = struct{}{}
+				texts = append(texts, tr)
+				accumulatedBytes += len(tr)
+			}
+			return true
+		}
+		seen[t] = struct{}{}
+		texts = append(texts, t)
+		accumulatedBytes += len(t)
+		return false
+	}
+
+outer:
 	for _, b := range blobs {
 		if b.Name == "__next_f" {
 			for _, t := range extractNextFText(b.Data) {
-				if _, ok := seen[t]; !ok {
-					seen[t] = struct{}{}
-					texts = append(texts, t)
+				if stop := appendWithinCap(t); stop {
+					break outer
 				}
 			}
 			continue
@@ -282,9 +313,8 @@ func ExtractReadableTextFromBlobs(blobs []JsDataBlob) string {
 		var found []string
 		walkJSONForText(v, &found, 0)
 		for _, t := range found {
-			if _, ok := seen[t]; !ok {
-				seen[t] = struct{}{}
-				texts = append(texts, t)
+			if stop := appendWithinCap(t); stop {
+				break outer
 			}
 		}
 	}

@@ -38,6 +38,8 @@ var cookieConsentIDPrefixes = []string{
 	"gdpr", "consent-", "cmp-", "sp_message", "qc-cmp", "trustarc", "evidon",
 }
 
+var structuralIDSuffixes = []string{"portal", "root", "container", "wrapper", "mount", "app"}
+
 // IsNoise reports whether this node is structural/UI noise (nav, ads, cookie banners, etc.).
 func IsNoise(sel *goquery.Selection) bool {
 	if sel == nil || sel.Length() == 0 {
@@ -109,8 +111,7 @@ func IsNoiseDescendant(sel *goquery.Selection) bool {
 }
 
 func isStructuralID(id string) bool {
-	suffixes := []string{"portal", "root", "container", "wrapper", "mount", "app"}
-	for _, s := range suffixes {
+	for _, s := range structuralIDSuffixes {
 		if strings.Contains(id, s) {
 			return true
 		}

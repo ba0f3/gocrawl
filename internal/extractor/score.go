@@ -59,7 +59,9 @@ func scoreNode(sel *goquery.Selection) float64 {
 	case "article", "main":
 		score += 50
 	}
-	if role, _ := sel.Attr("role"); strings.TrimSpace(role) == "main" {
+	role, _ := sel.Attr("role")
+	roleNormalized := strings.ToLower(strings.TrimSpace(role))
+	if roleNormalized == "main" {
 		score += 50
 	}
 	if class, ok := sel.Attr("class"); ok {
@@ -85,7 +87,7 @@ func scoreNode(sel *goquery.Selection) float64 {
 	})
 	ltf := float64(linkTextLen)
 	isSemantic := tag == "article" || tag == "main"
-	if r, _ := sel.Attr("role"); strings.TrimSpace(r) == "main" {
+	if roleNormalized == "main" {
 		isSemantic = true
 	}
 	if textLen > 0 {
