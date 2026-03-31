@@ -1,6 +1,8 @@
 package extractor
 
 import (
+	"strings"
+
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
 )
@@ -13,7 +15,7 @@ func buildExcludeSet(doc *goquery.Document, selectors []string) map[*html.Node]s
 		selectors = selectors[:maxExcludeSelectors]
 	}
 	for _, sel := range selectors {
-		sel = trim(sel)
+		sel = strings.TrimSpace(sel)
 		if sel == "" {
 			continue
 		}
@@ -33,16 +35,6 @@ func addSubtreeNodes(ex map[*html.Node]struct{}, root *goquery.Selection) {
 			ex[n] = struct{}{}
 		}
 	})
-}
-
-func trim(s string) string {
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t') {
-		s = s[1:]
-	}
-	for len(s) > 0 && (s[len(s)-1] == ' ' || s[len(s)-1] == '\t') {
-		s = s[:len(s)-1]
-	}
-	return s
 }
 
 func isExcluded(n *html.Node, ex map[*html.Node]struct{}) bool {

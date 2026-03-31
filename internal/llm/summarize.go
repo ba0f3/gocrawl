@@ -14,8 +14,8 @@ import (
 	"gocrawl/internal/config"
 )
 
-// Matches backtick-delimited think.../think blocks emitted by some OSS models before the final answer.
-var thinkingTagRE = regexp.MustCompile("(?s)" + "`" + "think" + "`" + "[\\s\\S]*?" + "`" + "/think" + "`")
+// Matches <think>...</think> blocks emitted by some models before the final answer.
+var thinkingTagRE = regexp.MustCompile(`(?is)<think\b[^>]*>[\s\S]*?</think>`)
 
 // SummarizeMarkdown calls an OpenAI-compatible chat completions API (webclaw-style prompt).
 func SummarizeMarkdown(ctx context.Context, cfg *config.Config, model, markdown string, maxSentences int) (string, error) {
@@ -57,10 +57,11 @@ func SummarizeMarkdown(ctx context.Context, cfg *config.Config, model, markdown 
 	if k := strings.TrimSpace(cfg.LLM.APIKey); k != "" {
 		req.Header.Set("Authorization", "Bearer "+k)
 	}
-	client := &http.Client{Timeout: cfg.LLM.Timeout}
-	if client.Timeout == 0 {
-		client.Timeout = 120 * time.Second
+	timeout := cfg.LLM.Timeout
+	if timeout == 0 {
+		timeout = 120 * time.Second
 	}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

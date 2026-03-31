@@ -55,7 +55,7 @@ func IsNoise(sel *goquery.Selection) bool {
 		return true
 	}
 	if role, _ := sel.Attr("role"); role != "" {
-		if _, ok := noiseRoles[strings.TrimSpace(role)]; ok {
+		if _, ok := noiseRoles[strings.ToLower(strings.TrimSpace(role))]; ok {
 			return true
 		}
 	}
@@ -120,8 +120,9 @@ func isStructuralID(id string) bool {
 
 func isAdClass(class string) bool {
 	for _, tok := range strings.Fields(class) {
-		if tok == "ad" || strings.HasPrefix(tok, "ad-") || strings.HasPrefix(tok, "ad_") ||
-			strings.HasSuffix(tok, "-ad") || strings.HasSuffix(tok, "_ad") {
+		t := strings.ToLower(tok)
+		if t == "ad" || strings.HasPrefix(t, "ad-") || strings.HasPrefix(t, "ad_") ||
+			strings.HasSuffix(t, "-ad") || strings.HasSuffix(t, "_ad") {
 			return true
 		}
 	}

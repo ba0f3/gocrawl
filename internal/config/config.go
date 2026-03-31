@@ -186,7 +186,7 @@ func Load() (*Config, error) {
 	if cfg.Crawler.UserAgent == "" {
 		cfg.Crawler.UserAgent = "GoCrawl/1.0"
 	}
-	if cfg.Crawler.EnableChromeTLS && (cfg.Crawler.UserAgent == "" || cfg.Crawler.UserAgent == "GoCrawl/1.0") {
+	if cfg.Crawler.EnableChromeTLS && cfg.Crawler.UserAgent == "GoCrawl/1.0" {
 		cfg.Crawler.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 	}
 	if cfg.Crawler.MaxConcurrentCrawls == 0 {

@@ -113,6 +113,9 @@ func summarizeResult(req *ScrapeRequest, cfg *config.Config, result *ScrapeResul
 	if cfg == nil || result == nil || req == nil {
 		return
 	}
+	if strings.TrimSpace(result.Summary) != "" {
+		return
+	}
 	if !cfg.LLM.Enabled || req.Summarize == nil || !*req.Summarize {
 		return
 	}

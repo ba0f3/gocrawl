@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"testing"
+	"time"
 
 	"gocrawl/internal/config"
 )
@@ -24,7 +25,14 @@ func TestTransportForCrawler_DefaultNil(t *testing.T) {
 func TestTransportForCrawler_RetryOnly(t *testing.T) {
 	cfg := &config.Config{Crawler: config.CrawlerConfig{CrawlMaxRetries: 2, CrawlRetryBaseDelay: 0}}
 	rt := TransportForCrawler(cfg)
-	if rt == nil {
-		t.Fatal("expected retry transport")
+	r, ok := rt.(*retryTransport)
+	if !ok {
+		t.Fatalf("expected *retryTransport, got %T", rt)
+	}
+	if r.max != 2 {
+		t.Fatalf("expected max retries 2, got %d", r.max)
+	}
+	if r.baseDelay != time.Second {
+		t.Fatalf("expected default base delay %s, got %s", time.Second, r.baseDelay)
 	}
 }

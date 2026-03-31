@@ -1,7 +1,6 @@
 package extractor
 
 import (
-	"net/url"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -10,21 +9,13 @@ import (
 var mainOnlySelector = "article, main, [role='main']"
 
 // ExtractMainHTML returns inner HTML of the best main-content subtree using webclaw-style logic.
-func ExtractMainHTML(doc *goquery.Document, pageURL string, opts *ExtractionOptions) (html string, err error) {
+func ExtractMainHTML(doc *goquery.Document, _ string, opts *ExtractionOptions) (html string, err error) {
 	if doc == nil {
 		return "", nil
 	}
 	if opts == nil {
 		opts = &ExtractionOptions{OnlyMainContent: true}
 	}
-	var base *url.URL
-	if pageURL != "" {
-		if u, err := url.Parse(pageURL); err == nil {
-			base = u
-		}
-	}
-	_ = base
-
 	ex := buildExcludeSet(doc, opts.ExcludeSelectors)
 
 	if len(opts.IncludeSelectors) > 0 {

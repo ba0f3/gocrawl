@@ -38,7 +38,13 @@ func newChromeHTTPTransport() *http.Transport {
 			cfg.RootCAs = t.TLSClientConfig.RootCAs
 		}
 		uconn := utls.UClient(rawConn, cfg, utls.HelloChrome_Auto)
-		if err := uconn.HandshakeContext(ctx); err != nil {
+		handshakeTimeout := t.TLSHandshakeTimeout
+		if handshakeTimeout <= 0 {
+			handshakeTimeout = 10 * time.Second
+		}
+		handshakeCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+		defer cancel()
+		if err := uconn.HandshakeContext(handshakeCtx); err != nil {
 			_ = rawConn.Close()
 			return nil, err
 		}

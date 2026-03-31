@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/dop251/goja"
@@ -37,8 +38,20 @@ globalThis.navigator = {
 };
 globalThis.location = { href: "", hostname: "", pathname: "/", search: "", hash: "" };
 globalThis.history = { pushState: function(){}, replaceState: function(){} };
-globalThis.setTimeout = function(fn) { if (typeof fn === "function") { try { fn(); } catch(e) {} } return 0; };
-globalThis.clearTimeout = function() {};
+globalThis.__gocrawlTimerId = 1;
+globalThis.__gocrawlTimerQueue = [];
+globalThis.__gocrawlTimerFns = {};
+globalThis.setTimeout = function(fn) {
+  var id = globalThis.__gocrawlTimerId++;
+  if (typeof fn === "function") {
+    globalThis.__gocrawlTimerFns[id] = fn;
+    globalThis.__gocrawlTimerQueue.push(id);
+  }
+  return id;
+};
+globalThis.clearTimeout = function(id) {
+  delete globalThis.__gocrawlTimerFns[id];
+};
 globalThis.setInterval = function() { return 0; };
 globalThis.clearInterval = function() {};
 globalThis.requestAnimationFrame = function() { return 0; };
@@ -97,6 +110,20 @@ const jsevalScan = `
 })()
 `
 
+const jsevalDrainTimers = `
+(function() {
+  var safety = 1000;
+  while (globalThis.__gocrawlTimerQueue && globalThis.__gocrawlTimerQueue.length && safety-- > 0) {
+    var id = globalThis.__gocrawlTimerQueue.shift();
+    var fn = globalThis.__gocrawlTimerFns[id];
+    delete globalThis.__gocrawlTimerFns[id];
+    if (typeof fn === "function") {
+      try { fn(); } catch (e) {}
+    }
+  }
+})()
+`
+
 var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
 
 // JsDataBlob holds data extracted from inline script execution (webclaw-style).
@@ -147,6 +174,7 @@ func ExtractJsDataFromHTML(html string) []JsDataBlob {
 			break
 		}
 		_, _ = vm.RunString(script)
+		_, _ = vm.RunString(jsevalDrainTimers)
 	}
 	v, err := vm.RunString(jsevalScan)
 	if err != nil {
@@ -242,7 +270,11 @@ func filterReadable(s string) string {
 			alphaSpace++
 		}
 	}
-	if float64(alphaSpace)/float64(len(s)) < 0.6 {
+	totalRunes := utf8.RuneCountInString(s)
+	if totalRunes == 0 {
+		return ""
+	}
+	if float64(alphaSpace)/float64(totalRunes) < 0.6 {
 		return ""
 	}
 	if !strings.Contains(s, " ") {

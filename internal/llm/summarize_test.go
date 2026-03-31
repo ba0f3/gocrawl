@@ -46,4 +46,8 @@ func TestStripThinkingTags_TrimsSpace(t *testing.T) {
 	if stripThinkingTags("  hello  ") != "hello" {
 		t.Fatalf("got %q", stripThinkingTags("  hello  "))
 	}
+	got := stripThinkingTags("prefix <think>internal reasoning</think> summary")
+	if got != "prefix  summary" {
+		t.Fatalf("expected think block removed, got %q", got)
+	}
 }
