@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -170,6 +171,25 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 		return results
 	}
 
+	// ⚡ Bolt Optimization: Pre-compile IncludePaths and ExcludePaths into regular expressions.
+	// This avoids repeatedly iterating and doing strings.Contains for every discovered URL,
+	// significantly improving performance when these lists are large.
+	var includeRe, excludeRe *regexp.Regexp
+	if len(req.IncludePaths) > 0 {
+		var parts []string
+		for _, p := range req.IncludePaths {
+			parts = append(parts, regexp.QuoteMeta(p))
+		}
+		includeRe = regexp.MustCompile(strings.Join(parts, "|"))
+	}
+	if len(req.ExcludePaths) > 0 {
+		var parts []string
+		for _, p := range req.ExcludePaths {
+			parts = append(parts, regexp.QuoteMeta(p))
+		}
+		excludeRe = regexp.MustCompile(strings.Join(parts, "|"))
+	}
+
 	c := colly.NewCollector(
 		colly.MaxDepth(req.MaxDepth),
 		colly.Async(true),
@@ -200,17 +220,17 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 	if crawlLinkSelectors := effectiveCrawlLinkSelectors(req); len(crawlLinkSelectors) > 0 {
 		sel := strings.Join(crawlLinkSelectors, ", ")
 		c.OnHTML(sel, func(e *colly.HTMLElement) {
-			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
+			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu, includeRe, excludeRe)
 		})
 	} else {
 		c.OnHTML("article a[href], main a[href], [role=main] a[href], .post a[href], .entry-content a[href]", func(e *colly.HTMLElement) {
-			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
+			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu, includeRe, excludeRe)
 		})
 		c.OnHTML("a[href]", func(e *colly.HTMLElement) {
 			if linkInArticleOrMain(e) {
 				return
 			}
-			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu)
+			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu, includeRe, excludeRe)
 		})
 	}
 
@@ -259,11 +279,11 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 	return results
 }
 
-func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, req *CrawlRequestBody, visited map[string]bool, mu *sync.Mutex) {
+func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, req *CrawlRequestBody, visited map[string]bool, mu *sync.Mutex, includeRe, excludeRe *regexp.Regexp) {
 	link := e.Attr("href")
 	absURL := e.Request.AbsoluteURL(link)
 	mu.Lock()
-	if cm.shouldScrapeURL(absURL, baseURL, req) && !visited[absURL] {
+	if cm.shouldScrapeURL(absURL, baseURL, req, includeRe, excludeRe) && !visited[absURL] {
 		visited[absURL] = true
 		if len(visited) <= req.Limit {
 			mu.Unlock()
@@ -291,7 +311,7 @@ func effectiveCrawlLinkSelectors(req *CrawlRequestBody) []string {
 	return out
 }
 
-func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, req *CrawlRequestBody) bool {
+func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, req *CrawlRequestBody, includeRe, excludeRe *regexp.Regexp) bool {
 	parsedURL, err := url.Parse(absURL)
 	if err != nil {
 		return false
@@ -302,22 +322,12 @@ func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, req *Cr
 	if !req.AllowSubdomains && parsedURL.Host != baseURL.Host {
 		return false
 	}
-	if len(req.IncludePaths) > 0 {
-		included := false
-		for _, path := range req.IncludePaths {
-			if strings.Contains(parsedURL.Path, path) {
-				included = true
-				break
-			}
-		}
-		if !included {
-			return false
-		}
+	// ⚡ Bolt Optimization: Use pre-compiled regex instead of inner string loops.
+	if includeRe != nil && !includeRe.MatchString(parsedURL.Path) {
+		return false
 	}
-	for _, path := range req.ExcludePaths {
-		if strings.Contains(parsedURL.Path, path) {
-			return false
-		}
+	if excludeRe != nil && excludeRe.MatchString(parsedURL.Path) {
+		return false
 	}
 	return true
 }
