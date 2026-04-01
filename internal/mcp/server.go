@@ -27,6 +27,7 @@ type MCPServer struct {
 
 // CrawlJob represents a crawling job
 type CrawlJob struct {
+	mu        sync.RWMutex
 	ID        string
 	URL       string
 	Status    string
@@ -178,14 +179,18 @@ func (s *MCPServer) handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, arg
 
 // performCrawl performs the actual crawling
 func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, maxPages int) {
+	job.mu.Lock()
 	job.Status = "running"
+	job.mu.Unlock()
 
 	baseURL, err := url.Parse(job.URL)
 	if err != nil {
+		job.mu.Lock()
 		job.Status = "failed"
 		job.Error = fmt.Sprintf("invalid URL: %v", err)
 		now := time.Now()
 		job.EndTime = &now
+		job.mu.Unlock()
 		return
 	}
 
@@ -249,7 +254,9 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 			r.Request.URL, len(result.Markdown), len(result.Links))
 
 		crawlMu.Lock()
+		job.mu.Lock()
 		job.Progress++
+		job.mu.Unlock()
 		progress := job.Progress
 		crawlMu.Unlock()
 
@@ -282,14 +289,20 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 
 	select {
 	case <-ctx.Done():
+		job.mu.Lock()
 		job.Status = "failed"
 		job.Error = "crawl canceled"
+		job.mu.Unlock()
 	case <-done:
+		job.mu.Lock()
 		job.Status = "completed"
+		job.mu.Unlock()
 	}
 
 	now := time.Now()
+	job.mu.Lock()
 	job.EndTime = &now
+	job.mu.Unlock()
 }
 
 // StatsArgs represents empty arguments for the stats tool
@@ -315,6 +328,7 @@ func (s *MCPServer) handleStats(ctx context.Context, _ *mcp.CallToolRequest, _ S
 	}
 
 	for _, job := range s.crawlJobs {
+		job.mu.RLock()
 		jobInfo := map[string]interface{}{
 			"id":       job.ID,
 			"url":      job.URL,
@@ -330,6 +344,7 @@ func (s *MCPServer) handleStats(ctx context.Context, _ *mcp.CallToolRequest, _ S
 			jobInfo["error"] = job.Error
 		}
 
+		job.mu.RUnlock()
 		stats["jobs"] = append(stats["jobs"].([]map[string]interface{}), jobInfo)
 	}
 
