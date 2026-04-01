@@ -11,7 +11,7 @@ The previous method iterated through `IncludePaths` and `ExcludePaths` using `st
 **Measured Improvement:**
 For large arrays (e.g., 50-100 items), regex avoids repeating O(N) evaluations. A mock benchmark simulation using 50 exclusion paths showed strings taking `~5293 ns/op` and Regex taking `~2304 ns/op`, demonstrating a `~2.3x` improvement. However, in smaller arrays (e.g., 5 items), native `strings.Contains` is faster due to the static startup cost of invoking the Regex matching engine on simple bytes (`~1000 ns/op` vs `~4500 ns/op`). Given that crawling environments often filter long dynamically generated arrays, regex pre-compilation guarantees better asymptotic scaling behavior (O(1) compiled vs O(N) evaluation time over the long tail).
 
-## 2025-04-01 - O(1) Short-Circuiting URL Evaluation (`internal/api/crawl_manager.go`)
+## 2026-04-01 - O(1) Short-Circuiting URL Evaluation (`internal/api/crawl_manager.go`)
 
 **What:**
 Swapped condition evaluation order in `visitIfAllowed` from `cm.shouldScrapeURL(...) && !visited[absURL]` to `!visited[absURL] && cm.shouldScrapeURL(...)`.
