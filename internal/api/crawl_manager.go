@@ -277,7 +277,10 @@ func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, r
 	link := e.Attr("href")
 	absURL := e.Request.AbsoluteURL(link)
 	mu.Lock()
-	if cm.shouldScrapeURL(absURL, baseURL, req, includeRe, excludeRe) && !visited[absURL] {
+	// ⚡ Bolt Optimization: Checking !visited[absURL] first enables O(1) map lookup short-circuiting.
+	// If the URL has already been visited, this avoids calling shouldScrapeURL which involves parsing the URL,
+	// string manipulations, and regex matching. This drops the evaluation time for already-visited URLs significantly.
+	if !visited[absURL] && cm.shouldScrapeURL(absURL, baseURL, req, includeRe, excludeRe) {
 		visited[absURL] = true
 		if len(visited) <= req.Limit {
 			mu.Unlock()
