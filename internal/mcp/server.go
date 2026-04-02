@@ -241,33 +241,6 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		default:
 		}
 
-		link := e.Attr("href")
-		absURL := e.Request.AbsoluteURL(link)
-
-		parsedURL, err := url.Parse(absURL)
-		if err != nil || parsedURL.Host != baseURL.Host {
-			return
-		}
-
-		crawlMu.Lock()
-		if !visited[absURL] && len(visited) < maxPages {
-			visited[absURL] = true
-			crawlMu.Unlock()
-			if err := e.Request.Visit(absURL); err != nil {
-				log.Printf("Error visiting %s: %v", absURL, err)
-			}
-		} else {
-			crawlMu.Unlock()
-		}
-	})
-
-	c.OnScraped(func(r *colly.Response) {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
 		// ⚡ Bolt Optimization: Perform actual scrape and track progress metrics.
 		scrapeOpts := crawler.ScrapeRequest{
 			URL:            r.Request.URL.String(),
