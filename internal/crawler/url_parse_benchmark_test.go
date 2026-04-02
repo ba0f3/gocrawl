@@ -28,7 +28,7 @@ func BenchmarkAppendResolvedHref_New(b *testing.B) {
 
 	seen := make(map[string]struct{})
 
-    baseURL, _ := url.Parse(pageURL)
+	baseURL, _ := url.Parse(pageURL)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
