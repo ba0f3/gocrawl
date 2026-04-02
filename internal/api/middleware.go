@@ -10,6 +10,7 @@ import (
 	"gocrawl/internal/config"
 	"gocrawl/internal/db"
 	"gocrawl/internal/user"
+	"gocrawl/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
@@ -18,7 +19,7 @@ import (
 // LoggingMiddleware logs HTTP requests
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s %s", r.Method, r.URL.Path, r.RemoteAddr)
+		log.Printf("%s %s %s", r.Method, utils.SanitizeForLog(r.URL.Path), r.RemoteAddr)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -121,7 +122,7 @@ func RateLimitMiddleware(cfg config.RateLimitConfig) func(http.Handler) http.Han
 // GinLoggingMiddleware logs requests (uses ClientIP for compatibility with reverse proxies).
 func GinLoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		log.Printf("%s %s %s", c.Request.Method, c.Request.URL.Path, c.ClientIP())
+		log.Printf("%s %s %s", c.Request.Method, utils.SanitizeForLog(c.Request.URL.Path), c.ClientIP())
 		c.Next()
 	}
 }
