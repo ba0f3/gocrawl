@@ -15,6 +15,7 @@ type Store interface {
 	CreateCrawlJob(job *CrawlJob) error
 	GetCrawlJob(id string) (*CrawlJob, error)
 	UpdateCrawlJob(job *CrawlJob) error
+	UpdateJobProgress(jobID string, status string, completed int) error
 	ClaimNextQueuedJob() (*CrawlJob, error)
 	CreateCrawlResult(result *CrawlResult) error
 	CreateCrawlResults(results []*CrawlResult) error
@@ -71,6 +72,7 @@ func (NilStore) GetCrawlJob(id string) (*CrawlJob, error) {
 	return &CrawlJob{ID: id, Status: "unknown", CreatedAt: time.Now()}, nil
 }
 func (NilStore) UpdateCrawlJob(*CrawlJob) error                 { return nil }
+func (NilStore) UpdateJobProgress(string, string, int) error    { return nil }
 func (NilStore) ClaimNextQueuedJob() (*CrawlJob, error)         { return nil, nil }
 func (NilStore) CreateCrawlResult(*CrawlResult) error           { return nil }
 func (NilStore) CreateCrawlResults([]*CrawlResult) error        { return nil }

@@ -249,6 +249,18 @@ func (s *MongoStore) UpdateCrawlJob(job *CrawlJob) error {
 	return err
 }
 
+func (s *MongoStore) UpdateJobProgress(jobID string, status string, completed int) error {
+	_, err := s.db.Collection("crawl_jobs").UpdateOne(
+		context.Background(),
+		bson.M{"_id": jobID},
+		bson.M{"$set": bson.M{
+			"status":    status,
+			"completed": completed,
+		}},
+	)
+	return err
+}
+
 func (s *MongoStore) ClaimNextQueuedJob() (*CrawlJob, error) {
 	coll := s.db.Collection("crawl_jobs")
 	opts := options.FindOneAndUpdate().

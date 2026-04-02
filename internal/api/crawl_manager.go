@@ -131,6 +131,10 @@ func (cm *CrawlManager) runCrawlJob(jobID string, req *CrawlRequestBody) {
 }
 
 func (cm *CrawlManager) updateCrawlStatus(jobID string, status string, completed int) {
+	// ⚡ Bolt Optimization: Use targeted single UPDATE query rather than a N+1 pattern of fetching the whole row, mutating it and sending it back over the wire.
+	if err := cm.store.UpdateJobProgress(jobID, status, completed); err != nil {
+		log.Printf("Error updating crawl job status: %v", err)
+	}
 	cm.updateJob(jobID, "status update", func(job *db.CrawlJob) {
 		job.Status = status
 		job.Completed = completed
@@ -173,16 +177,28 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 	if len(req.IncludePaths) > 0 {
 		var parts []string
 		for _, p := range req.IncludePaths {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
 			parts = append(parts, regexp.QuoteMeta(p))
 		}
-		includeRe = regexp.MustCompile(strings.Join(parts, "|"))
+		if len(parts) > 0 {
+			includeRe = regexp.MustCompile(strings.Join(parts, "|"))
+		}
 	}
 	if len(req.ExcludePaths) > 0 {
 		var parts []string
 		for _, p := range req.ExcludePaths {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
 			parts = append(parts, regexp.QuoteMeta(p))
 		}
-		excludeRe = regexp.MustCompile(strings.Join(parts, "|"))
+		if len(parts) > 0 {
+			excludeRe = regexp.MustCompile(strings.Join(parts, "|"))
+		}
 	}
 
 	c := colly.NewCollector(

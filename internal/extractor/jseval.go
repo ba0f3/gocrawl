@@ -129,6 +129,7 @@ const jsevalDrainTimers = `
 
 var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
 var errExecutionTimeout = errors.New("execution timeout")
+
 const maxExtractedTextBytes = 256 * 1024
 
 var classicScriptTypes = map[string]struct{}{

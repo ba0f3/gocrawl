@@ -22,11 +22,13 @@ type MCPServer struct {
 	server    *mcp.Server
 	db        db.Store
 	cfg       *config.Config
+	crawlMu   sync.RWMutex
 	crawlJobs map[string]*CrawlJob
 }
 
 // CrawlJob represents a crawling job
 type CrawlJob struct {
+	mu        sync.RWMutex
 	ID        string
 	URL       string
 	Status    string
@@ -162,7 +164,10 @@ func (s *MCPServer) handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, arg
 		Total:     maxPages,
 		StartTime: time.Now(),
 	}
+
+	s.crawlMu.Lock()
 	s.crawlJobs[jobID] = job
+	s.crawlMu.Unlock()
 
 	// Start the crawl in a goroutine
 	go s.performCrawl(ctx, job, maxDepth, maxPages)
@@ -178,14 +183,18 @@ func (s *MCPServer) handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, arg
 
 // performCrawl performs the actual crawling
 func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, maxPages int) {
+	job.mu.Lock()
 	job.Status = "running"
+	job.mu.Unlock()
 
 	baseURL, err := url.Parse(job.URL)
 	if err != nil {
+		job.mu.Lock()
 		job.Status = "failed"
 		job.Error = fmt.Sprintf("invalid URL: %v", err)
 		now := time.Now()
 		job.EndTime = &now
+		job.mu.Unlock()
 		return
 	}
 
@@ -232,10 +241,38 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		default:
 		}
 
+		link := e.Attr("href")
+		absURL := e.Request.AbsoluteURL(link)
+
+		parsedURL, err := url.Parse(absURL)
+		if err != nil || parsedURL.Host != baseURL.Host {
+			return
+		}
+
+		crawlMu.Lock()
+		if !visited[absURL] && len(visited) < maxPages {
+			visited[absURL] = true
+			crawlMu.Unlock()
+			if err := e.Request.Visit(absURL); err != nil {
+				log.Printf("Error visiting %s: %v", absURL, err)
+			}
+		} else {
+			crawlMu.Unlock()
+		}
+	})
+
+	c.OnScraped(func(r *colly.Response) {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		// ⚡ Bolt Optimization: Perform actual scrape and track progress metrics.
 		scrapeOpts := crawler.ScrapeRequest{
-			URL:     r.Request.URL.String(),
-			Formats: []string{"markdown", "html", "rawHtml"},
+			URL:            r.Request.URL.String(),
+			Formats:        []string{"markdown", "html", "rawHtml"},
+			PreFetchedBody: r.Body,
 		}
 
 		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, s.cfg)
@@ -249,8 +286,10 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 			r.Request.URL, len(result.Markdown), len(result.Links))
 
 		crawlMu.Lock()
+		job.mu.Lock()
 		job.Progress++
 		progress := job.Progress
+		job.mu.Unlock()
 		crawlMu.Unlock()
 
 		log.Printf("Crawl progress: %d/%d pages (visited %s)", progress, job.Total, r.Request.URL)
@@ -271,7 +310,15 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 	visited[job.URL] = true
 	crawlMu.Unlock()
 
-	_ = c.Visit(job.URL)
+	if err := c.Visit(job.URL); err != nil {
+		job.mu.Lock()
+		job.Status = "failed"
+		job.Error = fmt.Sprintf("failed to visit initial URL: %v", err)
+		now := time.Now()
+		job.EndTime = &now
+		job.mu.Unlock()
+		return
+	}
 
 	// Wait for completion or context cancellation
 	done := make(chan struct{})
@@ -282,14 +329,20 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 
 	select {
 	case <-ctx.Done():
+		job.mu.Lock()
 		job.Status = "failed"
 		job.Error = "crawl canceled"
+		job.mu.Unlock()
 	case <-done:
+		job.mu.Lock()
 		job.Status = "completed"
+		job.mu.Unlock()
 	}
 
 	now := time.Now()
+	job.mu.Lock()
 	job.EndTime = &now
+	job.mu.Unlock()
 }
 
 // StatsArgs represents empty arguments for the stats tool
@@ -314,7 +367,10 @@ func (s *MCPServer) handleStats(ctx context.Context, _ *mcp.CallToolRequest, _ S
 		}
 	}
 
+	s.crawlMu.RLock()
+	defer s.crawlMu.RUnlock()
 	for _, job := range s.crawlJobs {
+		job.mu.RLock()
 		jobInfo := map[string]interface{}{
 			"id":       job.ID,
 			"url":      job.URL,
@@ -330,6 +386,7 @@ func (s *MCPServer) handleStats(ctx context.Context, _ *mcp.CallToolRequest, _ S
 			jobInfo["error"] = job.Error
 		}
 
+		job.mu.RUnlock()
 		stats["jobs"] = append(stats["jobs"].([]map[string]interface{}), jobInfo)
 	}
 

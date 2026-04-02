@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -31,7 +32,8 @@ type ScrapeResult struct {
 
 // ScrapeRequest represents a scrape request
 type ScrapeRequest struct {
-	URL string `json:"url"`
+	URL            string `json:"url"`
+	PreFetchedBody []byte `json:"-"`
 	// OnlyMainContent: omit or true = use main/article heuristics; false = full <body> (see EffectiveOnlyMainContent).
 	OnlyMainContent    *bool    `json:"onlyMainContent,omitempty"`
 	IncludeTags        []string `json:"includeTags"`
@@ -276,6 +278,33 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 		return scrapeViaChromedpOnly(ctx, req, cfg, timeout)
 	}
 
+	if req != nil && len(req.PreFetchedBody) > 0 {
+		result := &ScrapeResult{
+			Links:    []string{},
+			Metadata: make(map[string]string),
+		}
+
+		// Build a fake response and HTMLElement to reuse the logic
+		res := &colly.Response{
+			Body: req.PreFetchedBody,
+			Request: &colly.Request{
+				URL: mustParseURL(req.URL),
+			},
+		}
+
+		doc, err := goquery.NewDocumentFromReader(bytes.NewReader(req.PreFetchedBody))
+		if err == nil {
+			e := &colly.HTMLElement{
+				DOM:      doc.Selection,
+				Response: res,
+				Request:  res.Request,
+			}
+			populateScrapeResultFromBody(e, req, result)
+		}
+
+		return finalizeScrape(ctx, req, cfg, timeout, result, nil, req.PreFetchedBody)
+	}
+
 	c := colly.NewCollector(
 		colly.Debugger(&debug.LogDebugger{}),
 	)
@@ -319,35 +348,7 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 	})
 
 	c.OnHTML("html", func(e *colly.HTMLElement) {
-		if wantsFormat(req, "rawHtml") {
-			rawHTML, _ := e.DOM.Html()
-			result.RawHTML = rawHTML
-		}
-
-		contentHTML, scope, fullDoc := extractContentForScrape(e, req)
-		if wantsFormat(req, "html") {
-			result.HTML = contentHTML
-		}
-
-		collectScrapeLinks(e, req, scope, &result.Links)
-
-		if wantsFormat(req, "markdown") {
-			markdown, err := extractor.ToMarkdown(contentHTML)
-			if err == nil {
-				if fullDoc != nil && EffectiveUseAdvancedExtractor(req) {
-					markdown = extractor.RecoverMarkdownH1(fullDoc, markdown)
-				}
-				result.Markdown = markdown
-			}
-		}
-
-		result.Metadata["title"] = e.DOM.Find("title").Text()
-		result.Metadata["description"] = e.DOM.Find("meta[name='description']").AttrOr("content", "")
-		result.Metadata["language"] = e.DOM.Find("html").AttrOr("lang", "")
-		result.Metadata["sourceURL"] = req.URL
-		if e.Response != nil {
-			applyJsExtract(req, e.Response.Body, result)
-		}
+		populateScrapeResultFromBody(e, req, result)
 	})
 
 	c.OnError(func(r *colly.Response, err error) {
@@ -358,6 +359,43 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 	res, err := finalizeScrape(ctx, req, cfg, timeout, result, visitErr, pageBody)
 	summarizeResult(ctx, req, cfg, res)
 	return res, err
+}
+
+func populateScrapeResultFromBody(e *colly.HTMLElement, req *ScrapeRequest, result *ScrapeResult) {
+	if wantsFormat(req, "rawHtml") {
+		rawHTML, _ := e.DOM.Html()
+		result.RawHTML = rawHTML
+	}
+
+	contentHTML, scope, fullDoc := extractContentForScrape(e, req)
+	if wantsFormat(req, "html") {
+		result.HTML = contentHTML
+	}
+
+	collectScrapeLinks(e, req, scope, &result.Links)
+
+	if wantsFormat(req, "markdown") {
+		markdown, err := extractor.ToMarkdown(contentHTML)
+		if err == nil {
+			if fullDoc != nil && EffectiveUseAdvancedExtractor(req) {
+				markdown = extractor.RecoverMarkdownH1(fullDoc, markdown)
+			}
+			result.Markdown = markdown
+		}
+	}
+
+	result.Metadata["title"] = e.DOM.Find("title").Text()
+	result.Metadata["description"] = e.DOM.Find("meta[name='description']").AttrOr("content", "")
+	result.Metadata["language"] = e.DOM.Find("html").AttrOr("lang", "")
+	result.Metadata["sourceURL"] = req.URL
+	if e.Response != nil {
+		applyJsExtract(req, e.Response.Body, result)
+	}
+}
+
+func mustParseURL(u string) *url.URL {
+	pu, _ := url.Parse(u)
+	return pu
 }
 
 func contains(slice []string, item string) bool {

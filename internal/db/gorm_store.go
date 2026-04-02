@@ -255,6 +255,13 @@ func (s *GormStore) UpdateCrawlJob(job *CrawlJob) error {
 	}).Error
 }
 
+func (s *GormStore) UpdateJobProgress(jobID string, status string, completed int) error {
+	return s.db.Model(&gormCrawlJobRow{}).Where("id = ?", jobID).Updates(map[string]interface{}{
+		"status":    status,
+		"completed": completed,
+	}).Error
+}
+
 func (s *GormStore) ClaimNextQueuedJob() (*CrawlJob, error) {
 	if s.dialect == "sqlite" {
 		s.claimMu.Lock()
