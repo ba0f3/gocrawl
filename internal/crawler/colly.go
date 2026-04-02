@@ -75,7 +75,13 @@ func wantsFormat(req *ScrapeRequest, format string) bool {
 
 func finalizeScrape(ctx context.Context, req *ScrapeRequest, cfg *config.Config, timeout time.Duration, result *ScrapeResult, visitErr error, pageBody []byte) (*ScrapeResult, error) {
 	if cfg != nil && ChromedpConfigured(cfg) && cfg.Crawler.ChromedpAutoFallback {
-		if ok, why := ShouldChromedpFallback(visitErr, result, EffectiveOnlyMainContent(req), cfg.Crawler.ChromedpFallbackStatusCodes, pageBody); ok {
+		if ok, why := ShouldChromedpFallback(&FallbackCriteria{
+			VisitErr:    visitErr,
+			Result:      result,
+			OnlyMain:    EffectiveOnlyMainContent(req),
+			StatusCodes: cfg.Crawler.ChromedpFallbackStatusCodes,
+			PageBody:    pageBody,
+		}); ok {
 			html, err := ScrapeHTMLViaChromedp(cfg, req, timeout)
 			if err == nil {
 				html, doc := refineChromedpHTML(html, req)
@@ -88,10 +94,10 @@ func finalizeScrape(ctx context.Context, req *ScrapeRequest, cfg *config.Config,
 			}
 		}
 	}
-	if ctx.VisitErr != nil {
-		return nil, ctx.VisitErr
+	if visitErr != nil {
+		return nil, visitErr
 	}
-	return ctx.Result, nil
+	return result, nil
 }
 
 func scrapeViaChromedpOnly(ctx context.Context, req *ScrapeRequest, cfg *config.Config, timeout time.Duration) (*ScrapeResult, error) {

@@ -26,24 +26,24 @@ func BenchmarkContains(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, tp := range testPaths {
-            if len(paths) > 0 {
-                included := false
-                for _, p := range paths {
-                    if strings.Contains(tp, p) {
-                        included = true
-                        break
-                    }
-                }
-                if !included {
-                    continue
-                }
-            }
+			if len(paths) > 0 {
+				included := false
+				for _, p := range paths {
+					if strings.Contains(tp, p) {
+						included = true
+						break
+					}
+				}
+				if !included {
+					continue
+				}
+			}
 
-            for _, p := range excludePaths {
-                if strings.Contains(tp, p) {
-                    break
-                }
-            }
+			for _, p := range excludePaths {
+				if strings.Contains(tp, p) {
+					break
+				}
+			}
 		}
 	}
 }
