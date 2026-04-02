@@ -32,6 +32,7 @@ type ScrapeResult struct {
 // ScrapeRequest represents a scrape request
 type ScrapeRequest struct {
 	URL string `json:"url"`
+	PreFetchedBody []byte `json:"-"`
 	// OnlyMainContent: omit or true = use main/article heuristics; false = full <body> (see EffectiveOnlyMainContent).
 	OnlyMainContent    *bool    `json:"onlyMainContent,omitempty"`
 	IncludeTags        []string `json:"includeTags"`
