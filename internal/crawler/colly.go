@@ -86,10 +86,10 @@ func finalizeScrape(ctx context.Context, req *ScrapeRequest, cfg *config.Config,
 			}
 		}
 	}
-	if visitErr != nil {
-		return nil, visitErr
+	if ctx.VisitErr != nil {
+		return nil, ctx.VisitErr
 	}
-	return result, nil
+	return ctx.Result, nil
 }
 
 func scrapeViaChromedpOnly(ctx context.Context, req *ScrapeRequest, cfg *config.Config, timeout time.Duration) (*ScrapeResult, error) {

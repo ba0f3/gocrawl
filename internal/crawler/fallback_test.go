@@ -7,14 +7,20 @@ import (
 )
 
 func TestShouldChromedpFallback_visitError(t *testing.T) {
-	yes, tag := ShouldChromedpFallback(errors.New("fail"), &ScrapeResult{Metadata: map[string]string{}}, true, nil, nil)
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		VisitErr: errors.New("fail"),
+		Result:   &ScrapeResult{Metadata: map[string]string{}},
+		OnlyMain: true,
+	})
 	if !yes || tag != "visit_error" {
 		t.Fatalf("got %v %q", yes, tag)
 	}
 }
 
 func TestShouldChromedpFallback_nilResult(t *testing.T) {
-	yes, tag := ShouldChromedpFallback(nil, nil, true, nil, nil)
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		OnlyMain: true,
+	})
 	if !yes || tag != "nil_result" {
 		t.Fatalf("got %v %q", yes, tag)
 	}
@@ -22,7 +28,10 @@ func TestShouldChromedpFallback_nilResult(t *testing.T) {
 
 func TestShouldChromedpFallback_collyError(t *testing.T) {
 	res := &ScrapeResult{Metadata: map[string]string{"error": "timeout"}}
-	yes, tag := ShouldChromedpFallback(nil, res, true, nil, nil)
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		Result:   res,
+		OnlyMain: true,
+	})
 	if !yes || tag != "colly_error" {
 		t.Fatalf("got %v %q", yes, tag)
 	}
@@ -30,18 +39,25 @@ func TestShouldChromedpFallback_collyError(t *testing.T) {
 
 func TestShouldChromedpFallback_statusCodes(t *testing.T) {
 	res := &ScrapeResult{Metadata: map[string]string{"statusCode": "403"}}
-	yes, tag := ShouldChromedpFallback(nil, res, false, nil, nil)
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		Result: res,
+	})
 	if !yes || tag != "status_403" {
 		t.Fatalf("got %v %q", yes, tag)
 	}
 	res2 := &ScrapeResult{Metadata: map[string]string{"statusCode": "200"}}
-	yes2, _ := ShouldChromedpFallback(nil, res2, false, nil, nil)
+	yes2, _ := ShouldChromedpFallback(&FallbackCriteria{
+		Result: res2,
+	})
 	if yes2 {
 		t.Fatal("expected no fallback for 200")
 	}
 	custom := []int{500}
 	res3 := &ScrapeResult{Metadata: map[string]string{"statusCode": "500"}}
-	yes3, tag3 := ShouldChromedpFallback(nil, res3, false, custom, nil)
+	yes3, tag3 := ShouldChromedpFallback(&FallbackCriteria{
+		Result:      res3,
+		StatusCodes: custom,
+	})
 	if !yes3 || tag3 != "status_500" {
 		t.Fatalf("custom codes: got %v %q", yes3, tag3)
 	}
@@ -50,7 +66,10 @@ func TestShouldChromedpFallback_statusCodes(t *testing.T) {
 func TestShouldChromedpFallback_challengeHTML(t *testing.T) {
 	html := "<html><title>Just a moment...</title><body>cloudflare</body></html>"
 	res := &ScrapeResult{Metadata: map[string]string{"statusCode": "200"}}
-	yes, tag := ShouldChromedpFallback(nil, res, false, nil, []byte(html))
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		Result:   res,
+		PageBody: []byte(html),
+	})
 	if !yes || tag != "challenge_html" {
 		t.Fatalf("got %v %q", yes, tag)
 	}
@@ -62,7 +81,10 @@ func TestShouldChromedpFallback_spaShell(t *testing.T) {
 		Metadata: map[string]string{"statusCode": "200"},
 		Markdown: strings.Repeat("word ", 30),
 	}
-	yes, tag := ShouldChromedpFallback(nil, res, false, nil, []byte(html))
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		Result:   res,
+		PageBody: []byte(html),
+	})
 	if !yes || tag != "spa_shell" {
 		t.Fatalf("got %v %q", yes, tag)
 	}
@@ -72,7 +94,10 @@ func TestShouldChromedpFallback_csrFrameworkNext(t *testing.T) {
 	html := `<!DOCTYPE html><html><head><script src="/_next/static/chunks/main.js"></script></head><body></body></html>` +
 		strings.Repeat(" ", 2600)
 	res := &ScrapeResult{Metadata: map[string]string{"statusCode": "200"}, Markdown: "x"}
-	yes, tag := ShouldChromedpFallback(nil, res, false, nil, []byte(html))
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		Result:   res,
+		PageBody: []byte(html),
+	})
 	if !yes || tag != "csr_framework" {
 		t.Fatalf("got %v %q want csr_framework", yes, tag)
 	}
@@ -81,7 +106,10 @@ func TestShouldChromedpFallback_csrFrameworkNext(t *testing.T) {
 func TestShouldChromedpFallback_csrFrameworkVue(t *testing.T) {
 	html := `<!DOCTYPE html><html><body><div data-v-1a2b3c4d></div></body></html>` + strings.Repeat("\n", 2600)
 	res := &ScrapeResult{Metadata: map[string]string{"statusCode": "200"}, Markdown: "x"}
-	yes, tag := ShouldChromedpFallback(nil, res, false, nil, []byte(html))
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		Result:   res,
+		PageBody: []byte(html),
+	})
 	if !yes || tag != "csr_framework" {
 		t.Fatalf("got %v %q want csr_framework", yes, tag)
 	}
@@ -109,7 +137,11 @@ func TestShouldChromedpFallback_thinMarkdown(t *testing.T) {
 		Metadata: map[string]string{"statusCode": "200"},
 		Markdown: "short",
 	}
-	yes, tag := ShouldChromedpFallback(nil, res, true, nil, []byte("<html><body><p>ok</p></body></html>"))
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		Result:   res,
+		OnlyMain: true,
+		PageBody: []byte("<html><body><p>ok</p></body></html>"),
+	})
 	if !yes || tag != "thin_markdown" {
 		t.Fatalf("got %v %q", yes, tag)
 	}
@@ -120,7 +152,11 @@ func TestShouldChromedpFallback_thinMarkdownSkippedWhenFullPage(t *testing.T) {
 		Metadata: map[string]string{"statusCode": "200"},
 		Markdown: "short",
 	}
-	yes, _ := ShouldChromedpFallback(nil, res, false, nil, []byte("<html><body><p>ok</p></body></html>"))
+	yes, _ := ShouldChromedpFallback(&FallbackCriteria{
+		Result:   res,
+		OnlyMain: false,
+		PageBody: []byte("<html><body><p>ok</p></body></html>"),
+	})
 	if yes {
 		t.Fatal("onlyMain false should not use thin_markdown alone")
 	}
