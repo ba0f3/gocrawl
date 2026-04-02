@@ -14,6 +14,7 @@ import (
 	"gocrawl/internal/config"
 	"gocrawl/internal/crawler"
 	"gocrawl/internal/db"
+	"gocrawl/internal/utils"
 
 	"github.com/gocolly/colly/v2"
 )
@@ -254,7 +255,7 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 
 		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, cm.cfg)
 		if err != nil {
-			log.Printf("Error scraping page %s: %v", r.Request.URL, err)
+			log.Printf("Error scraping page %s: %v", utils.SanitizeForLog(r.Request.URL.String()), err)
 			return
 		}
 		crawlMu.Lock()
@@ -285,7 +286,7 @@ func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, r
 		if len(visited) <= req.Limit {
 			mu.Unlock()
 			if err := e.Request.Visit(absURL); err != nil {
-				log.Printf("Failed to visit %s: %v", absURL, err)
+				log.Printf("Failed to visit %s: %v", utils.SanitizeForLog(absURL), err)
 			}
 			return
 		}
