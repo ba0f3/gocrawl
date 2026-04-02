@@ -100,38 +100,27 @@ func (m *SSEManager) Broadcast(event SSEEvent) {
 
 // BroadcastCrawlUpdate broadcasts a crawl update
 func (m *SSEManager) BroadcastCrawlUpdate(job *CrawlJob) {
-	job.mu.RLock()
-	jobID := job.ID
-	jobURL := job.URL
-	jobStatus := job.Status
-	jobProgress := job.Progress
-	jobTotal := job.Total
-	jobEndTime := job.EndTime
-	jobStartTime := job.StartTime
-	jobError := job.Error
-	job.mu.RUnlock()
-
 	event := SSEEvent{
 		Type: "crawl_progress",
 		Data: map[string]interface{}{
-			"jobId":    jobID,
-			"url":      jobURL,
-			"status":   jobStatus,
-			"progress": jobProgress,
-			"total":    jobTotal,
+			"jobId":    job.ID,
+			"url":      job.URL,
+			"status":   job.Status,
+			"progress": job.Progress,
+			"total":    job.Total,
 		},
 		Timestamp: time.Now(),
 	}
 
-	if jobStatus == "completed" {
+	if job.Status == "completed" {
 		event.Type = "crawl_completed"
-		if jobEndTime != nil {
-			event.Data["duration"] = jobEndTime.Sub(jobStartTime).Seconds()
+		if job.EndTime != nil {
+			event.Data["duration"] = job.EndTime.Sub(job.StartTime).Seconds()
 		}
-	} else if jobStatus == "failed" {
+	} else if job.Status == "failed" {
 		event.Type = "error"
-		event.Data["error"] = jobError
-	} else if jobStatus == "running" && jobProgress == 1 {
+		event.Data["error"] = job.Error
+	} else if job.Status == "running" && job.Progress == 1 {
 		event.Type = "crawl_started"
 	}
 

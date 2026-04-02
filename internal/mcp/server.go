@@ -22,7 +22,6 @@ type MCPServer struct {
 	server    *mcp.Server
 	db        db.Store
 	cfg       *config.Config
-	crawlMu   sync.RWMutex
 	crawlJobs map[string]*CrawlJob
 }
 
@@ -164,10 +163,7 @@ func (s *MCPServer) handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, arg
 		Total:     maxPages,
 		StartTime: time.Now(),
 	}
-
-	s.crawlMu.Lock()
 	s.crawlJobs[jobID] = job
-	s.crawlMu.Unlock()
 
 	// Start the crawl in a goroutine
 	go s.performCrawl(ctx, job, maxDepth, maxPages)
@@ -243,9 +239,8 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 
 		// ⚡ Bolt Optimization: Perform actual scrape and track progress metrics.
 		scrapeOpts := crawler.ScrapeRequest{
-			URL:            r.Request.URL.String(),
-			Formats:        []string{"markdown", "html", "rawHtml"},
-			PreFetchedBody: r.Body,
+			URL:     r.Request.URL.String(),
+			Formats: []string{"markdown", "html", "rawHtml"},
 		}
 
 		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, s.cfg)
@@ -283,15 +278,7 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 	visited[job.URL] = true
 	crawlMu.Unlock()
 
-	if err := c.Visit(job.URL); err != nil {
-		job.mu.Lock()
-		job.Status = "failed"
-		job.Error = fmt.Sprintf("failed to visit initial URL: %v", err)
-		now := time.Now()
-		job.EndTime = &now
-		job.mu.Unlock()
-		return
-	}
+	_ = c.Visit(job.URL)
 
 	// Wait for completion or context cancellation
 	done := make(chan struct{})
@@ -340,8 +327,6 @@ func (s *MCPServer) handleStats(ctx context.Context, _ *mcp.CallToolRequest, _ S
 		}
 	}
 
-	s.crawlMu.RLock()
-	defer s.crawlMu.RUnlock()
 	for _, job := range s.crawlJobs {
 		job.mu.RLock()
 		jobInfo := map[string]interface{}{
