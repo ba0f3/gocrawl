@@ -246,6 +246,7 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 			}
 		}
 		scrapeOpts.URL = r.Request.URL.String()
+		scrapeOpts.PreFetchedBody = r.Body
 		// Per-page ScrapeURL uses its own Colly collector; inherit crawl linkSelectors for
 		// result.links and debugger logs unless scrapeOptions.linkSelector is set.
 		if crawlSels := effectiveCrawlLinkSelectors(req); len(crawlSels) > 0 && strings.TrimSpace(scrapeOpts.LinkSelector) == "" {

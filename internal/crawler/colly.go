@@ -31,7 +31,8 @@ type ScrapeResult struct {
 
 // ScrapeRequest represents a scrape request
 type ScrapeRequest struct {
-	URL string `json:"url"`
+	PreFetchedBody []byte `json:"-"`
+	URL            string `json:"url"`
 	// OnlyMainContent: omit or true = use main/article heuristics; false = full <body> (see EffectiveOnlyMainContent).
 	OnlyMainContent    *bool    `json:"onlyMainContent,omitempty"`
 	IncludeTags        []string `json:"includeTags"`
@@ -273,6 +274,14 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 
 	if req != nil && req.ForceBrowser {
 		return scrapeViaChromedpOnly(ctx, req, cfg, timeout)
+	}
+
+	if req != nil && len(req.PreFetchedBody) > 0 {
+		result := &ScrapeResult{
+			Links:    []string{},
+			Metadata: make(map[string]string),
+		}
+		return finalizeScrape(ctx, req, cfg, timeout, result, nil, req.PreFetchedBody)
 	}
 
 	c := colly.NewCollector(
