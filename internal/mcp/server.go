@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
+	"sync"
 	"time"
 
 	"gocrawl/internal/config"
 	"gocrawl/internal/crawler"
 	"gocrawl/internal/db"
 
+	"github.com/gocolly/colly/v2"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -109,7 +112,7 @@ func (s *MCPServer) handleScrape(ctx context.Context, _ *mcp.CallToolRequest, ar
 	}
 
 	// Perform the scrape
-	result, err := crawler.ScrapeURL(req, s.cfg)
+	result, err := crawler.ScrapeURLWithContext(ctx, req, s.cfg)
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -162,7 +165,7 @@ func (s *MCPServer) handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, arg
 	s.crawlJobs[jobID] = job
 
 	// Start the crawl in a goroutine
-	go s.performCrawl(job, maxDepth, maxPages)
+	go s.performCrawl(ctx, job, maxDepth, maxPages)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -174,20 +177,117 @@ func (s *MCPServer) handleCrawl(ctx context.Context, _ *mcp.CallToolRequest, arg
 }
 
 // performCrawl performs the actual crawling
-func (s *MCPServer) performCrawl(job *CrawlJob, maxDepth, maxPages int) {
+func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, maxPages int) {
 	job.Status = "running"
 
-	// TODO: Implement actual crawling logic
-	// For now, we'll simulate progress
-	for i := 0; i < maxPages; i++ {
-		time.Sleep(1 * time.Second)
-		job.Progress = i + 1
-
-		// Simulate sending SSE update
-		log.Printf("Crawl progress: %d/%d pages", job.Progress, job.Total)
+	baseURL, err := url.Parse(job.URL)
+	if err != nil {
+		job.Status = "failed"
+		job.Error = fmt.Sprintf("invalid URL: %v", err)
+		now := time.Now()
+		job.EndTime = &now
+		return
 	}
 
-	job.Status = "completed"
+	c := colly.NewCollector(
+		colly.MaxDepth(maxDepth),
+		colly.Async(true),
+	)
+
+	// Restrict to the same domain
+	c.AllowedDomains = []string{baseURL.Host}
+
+	var crawlMu sync.Mutex
+	visited := make(map[string]bool)
+
+	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		link := e.Attr("href")
+		absURL := e.Request.AbsoluteURL(link)
+
+		parsedURL, err := url.Parse(absURL)
+		if err != nil || parsedURL.Host != baseURL.Host {
+			return
+		}
+
+		crawlMu.Lock()
+		if !visited[absURL] && len(visited) < maxPages {
+			visited[absURL] = true
+			crawlMu.Unlock()
+			_ = e.Request.Visit(absURL)
+		} else {
+			crawlMu.Unlock()
+		}
+	})
+
+	c.OnScraped(func(r *colly.Response) {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// ⚡ Bolt Optimization: Perform actual scrape and track progress metrics.
+		scrapeOpts := crawler.ScrapeRequest{
+			URL:     r.Request.URL.String(),
+			Formats: []string{"markdown", "html", "rawHtml"},
+		}
+
+		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, s.cfg)
+		if err != nil {
+			log.Printf("Error scraping page %s: %v", r.Request.URL, err)
+			return
+		}
+
+		// ⚡ Bolt Optimization: Log extraction results size to help performance audits
+		log.Printf("Successfully scraped %s: %d chars markdown, %d links",
+			r.Request.URL, len(result.Markdown), len(result.Links))
+
+		crawlMu.Lock()
+		job.Progress++
+		progress := job.Progress
+		crawlMu.Unlock()
+
+		log.Printf("Crawl progress: %d/%d pages (visited %s)", progress, job.Total, r.Request.URL)
+	})
+
+	c.OnError(func(r *colly.Response, err error) {
+		log.Printf("Error visiting %s: %v", r.Request.URL, err)
+	})
+
+	// Add transport if configured
+	if s.cfg != nil {
+		if t := crawler.TransportForCrawler(s.cfg); t != nil {
+			c.WithTransport(t)
+		}
+	}
+
+	crawlMu.Lock()
+	visited[job.URL] = true
+	crawlMu.Unlock()
+
+	_ = c.Visit(job.URL)
+
+	// Wait for completion or context cancellation
+	done := make(chan struct{})
+	go func() {
+		c.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		job.Status = "failed"
+		job.Error = "crawl canceled"
+	case <-done:
+		job.Status = "completed"
+	}
+
 	now := time.Now()
 	job.EndTime = &now
 }

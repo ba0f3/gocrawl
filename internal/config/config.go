@@ -14,9 +14,19 @@ type Config struct {
 	Database  DatabaseConfig
 	Security  SecurityConfig
 	Crawler   CrawlerConfig
+	LLM       LLMConfig
 	Retention RetentionConfig
 	RateLimit RateLimitConfig
 	SSE       SSEConfig
+}
+
+// LLMConfig enables optional OpenAI-compatible summarization (cheap local or hosted models).
+type LLMConfig struct {
+	Enabled bool
+	BaseURL string
+	APIKey  string
+	Model   string
+	Timeout time.Duration
 }
 
 type ServerConfig struct {
@@ -64,6 +74,8 @@ type CrawlerConfig struct {
 	ChromedpHydrationMinTextRunes int
 	ChromedpFallbackStatusCodes   []int // HTTP status codes that trigger chromedp when auto fallback is on
 	ChromedpAutoFallback          bool  // when false, only forceBrowser uses chromedp
+	// EnableChromeTLS uses uTLS (Chrome ClientHello) for Colly HTTP(S) fetches to reduce TLS fingerprint blocks.
+	EnableChromeTLS bool
 }
 
 type RetentionConfig struct {
@@ -104,6 +116,13 @@ func Load() (*Config, error) {
 			JWTSecret:  viper.GetString("JWT_SECRET"),
 			EnableAuth: viper.GetBool("ENABLE_AUTH"),
 		},
+		LLM: LLMConfig{
+			Enabled: viper.GetBool("LLM_ENABLED"),
+			BaseURL: viper.GetString("LLM_BASE_URL"),
+			APIKey:  viper.GetString("LLM_API_KEY"),
+			Model:   viper.GetString("LLM_MODEL"),
+			Timeout: viper.GetDuration("LLM_TIMEOUT"),
+		},
 		Crawler: CrawlerConfig{
 			MaxConcurrentCrawls: viper.GetInt("MAX_CONCURRENT_CRAWLS"),
 			CrawlWorkers:        viper.GetInt("CRAWL_WORKERS"),
@@ -123,6 +142,7 @@ func Load() (*Config, error) {
 			ChromedpHydrationMaxPolls:    viper.GetInt("CHROMEDP_HYDRATION_MAX_POLLS"),
 			ChromedpHydrationMinTextRunes: viper.GetInt("CHROMEDP_HYDRATION_MIN_TEXT_RUNES"),
 			ChromedpAutoFallback:          true,
+			EnableChromeTLS:               viper.GetBool("ENABLE_CHROME_TLS"),
 		},
 		Retention: RetentionConfig{
 			DataRetentionDays: viper.GetInt("DATA_RETENTION_DAYS"),
@@ -166,6 +186,9 @@ func Load() (*Config, error) {
 	if cfg.Crawler.UserAgent == "" {
 		cfg.Crawler.UserAgent = "GoCrawl/1.0"
 	}
+	if cfg.Crawler.EnableChromeTLS && cfg.Crawler.UserAgent == "GoCrawl/1.0" {
+		cfg.Crawler.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+	}
 	if cfg.Crawler.MaxConcurrentCrawls == 0 {
 		cfg.Crawler.MaxConcurrentCrawls = 10
 	}
@@ -203,6 +226,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.Crawler.ChromedpHydrationMinTextRunes == 0 {
 		cfg.Crawler.ChromedpHydrationMinTextRunes = 80
+	}
+	if cfg.LLM.Timeout == 0 {
+		cfg.LLM.Timeout = 120 * time.Second
 	}
 
 	return cfg, nil

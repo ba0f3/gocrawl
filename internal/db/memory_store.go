@@ -109,6 +109,23 @@ func (m *MemoryStore) CreateCrawlResult(result *CrawlResult) error {
 	return nil
 }
 
+func (m *MemoryStore) CreateCrawlResults(results []*CrawlResult) error {
+	if len(results) == 0 {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, result := range results {
+		cpy := *result
+		if cpy.ID == "" {
+			cpy.ID = uuid.New().String()
+		}
+		m.byJob[cpy.JobID] = append(m.byJob[cpy.JobID], &cpy)
+	}
+	return nil
+}
+
 func (m *MemoryStore) GetCrawlResults(jobID string) ([]*CrawlResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

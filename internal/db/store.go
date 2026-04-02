@@ -17,6 +17,7 @@ type Store interface {
 	UpdateCrawlJob(job *CrawlJob) error
 	ClaimNextQueuedJob() (*CrawlJob, error)
 	CreateCrawlResult(result *CrawlResult) error
+	CreateCrawlResults(results []*CrawlResult) error
 	GetCrawlResults(jobID string) ([]*CrawlResult, error)
 	InitSchema() error
 	StartCleanupRoutine(cfg config.RetentionConfig)
@@ -72,6 +73,7 @@ func (NilStore) GetCrawlJob(id string) (*CrawlJob, error) {
 func (NilStore) UpdateCrawlJob(*CrawlJob) error                 { return nil }
 func (NilStore) ClaimNextQueuedJob() (*CrawlJob, error)         { return nil, nil }
 func (NilStore) CreateCrawlResult(*CrawlResult) error           { return nil }
+func (NilStore) CreateCrawlResults([]*CrawlResult) error        { return nil }
 func (NilStore) GetCrawlResults(string) ([]*CrawlResult, error) { return nil, nil }
 func (NilStore) InitSchema() error                              { return nil }
 func (NilStore) StartCleanupRoutine(config.RetentionConfig)     {}

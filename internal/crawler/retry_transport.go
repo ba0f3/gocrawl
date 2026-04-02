@@ -9,28 +9,45 @@ import (
 	"gocrawl/internal/config"
 )
 
-// NewRetryTransport returns an http.RoundTripper that retries 429 and 5xx responses
-// and honors Retry-After when present. Returns nil if retries are disabled.
-func NewRetryTransport(cfg *config.Config) http.RoundTripper {
-	if cfg == nil || cfg.Crawler.CrawlMaxRetries <= 0 {
+// TransportForCrawler returns the HTTP transport for Colly: Chrome-like TLS (uTLS) when enabled,
+// otherwise a clone of the default transport, optionally wrapped with retry logic.
+// Returns nil when neither Chrome TLS nor retries apply (Colly uses library defaults).
+func TransportForCrawler(cfg *config.Config) http.RoundTripper {
+	if cfg == nil {
 		return nil
 	}
-	base := http.DefaultTransport
-	if t, ok := http.DefaultTransport.(*http.Transport); ok {
-		cloned := t.Clone()
-		base = cloned
+	var base http.RoundTripper
+	if cfg.Crawler.EnableChromeTLS {
+		base = newChromeHTTPTransport()
+	} else {
+		if t, ok := http.DefaultTransport.(*http.Transport); ok {
+			base = t.Clone()
+		} else {
+			base = http.DefaultTransport
+		}
 	}
-	return &retryTransport{
-		base: base,
-		max:  cfg.Crawler.CrawlMaxRetries,
-		baseDelay: func() time.Duration {
-			d := cfg.Crawler.CrawlRetryBaseDelay
-			if d <= 0 {
-				return time.Second
-			}
-			return d
-		}(),
+	if cfg.Crawler.CrawlMaxRetries > 0 {
+		return &retryTransport{
+			base: base,
+			max:  cfg.Crawler.CrawlMaxRetries,
+			baseDelay: func() time.Duration {
+				d := cfg.Crawler.CrawlRetryBaseDelay
+				if d <= 0 {
+					return time.Second
+				}
+				return d
+			}(),
+		}
 	}
+	if cfg.Crawler.EnableChromeTLS {
+		return base
+	}
+	return nil
+}
+
+// NewRetryTransport returns TransportForCrawler for backward compatibility.
+func NewRetryTransport(cfg *config.Config) http.RoundTripper {
+	return TransportForCrawler(cfg)
 }
 
 type retryTransport struct {

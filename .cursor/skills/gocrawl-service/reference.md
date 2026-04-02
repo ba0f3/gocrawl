@@ -98,6 +98,8 @@ Returns **`CrawlStatusResponse`** directly (no `success` wrapper): `status`, `to
 ## 4. How `/v1/scrape` works
 
 - **Purpose:** Fetch **one URL**, extract content (Markdown/HTML), metadata, and links — **synchronously** in the HTTP request.
+
+**v3 options (JSON body):** `excludeSelectors`, `useAdvancedExtractor` (defaults follow `onlyMainContent`), `extractJsData` (goja sandbox for `window.__*` blobs), `summarize` plus optional `summaryMaxSentences` / `summaryModel` when **`LLM_ENABLED`** and **`LLM_BASE_URL`** / **`LLM_MODEL`** are set server-side. Response may include `summary`. Server env **`ENABLE_CHROME_TLS`** switches Colly to a Chrome-like TLS fingerprint (uTLS).
 - **Method:** `POST`
 - **Body:** `ScrapeRequest` JSON (see below).
 - **Flow:** unless **`forceBrowser: true`**, HTTP fetch (Colly) → HTML parse → optional chromedp fallback if Lightpanda is configured and auto-heuristics match (or always when **`forceBrowser`**) → JSON response in **`data`**. Check **`metadata.chromedpTrigger`** when **`extractor`** is **`chromedp`** (e.g. **`spa_shell`** for empty mount nodes, **`csr_framework`** when HTML matches Vue/React/Next/Nuxt/Angular/SvelteKit/Remix/Astro/Vite-style signatures).

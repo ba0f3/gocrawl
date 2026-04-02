@@ -1,0 +1,7 @@
+goos: linux
+goarch: amd64
+pkg: gocrawl/internal/api
+cpu: Intel(R) Xeon(R) Processor @ 2.30GHz
+BenchmarkShouldScrapeURL-4   	  110131	     10270 ns/op
+PASS
+ok  	gocrawl/internal/api	1.278s
