@@ -161,13 +161,14 @@ func buildResultFromMainHTMLWithDoc(contentHTML string, req *ScrapeRequest, full
 	if err == nil {
 		root := doc.Find("#root").First()
 		seen := make(map[string]struct{})
+		baseURL, _ := url.Parse(req.URL)
 		if linkSelExplicit(req) {
 			doc.Find(strings.TrimSpace(req.LinkSelector)).Each(func(_ int, s *goquery.Selection) {
-				appendResolvedHref(s, req.URL, &result.Links, seen)
+				appendResolvedHref(s, baseURL, &result.Links, seen)
 			})
 		} else {
 			root.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
-				appendResolvedHref(s, req.URL, &result.Links, seen)
+				appendResolvedHref(s, baseURL, &result.Links, seen)
 			})
 		}
 	}
@@ -223,12 +224,11 @@ func pickContentHTML(e *colly.HTMLElement, req *ScrapeRequest) (contentHTML stri
 	return contentHTML, body
 }
 
-func appendResolvedHref(s *goquery.Selection, pageURL string, links *[]string, seen map[string]struct{}) {
+func appendResolvedHref(s *goquery.Selection, baseURL *url.URL, links *[]string, seen map[string]struct{}) {
 	href, _ := s.Attr("href")
-	if href == "" {
+	if href == "" || baseURL == nil {
 		return
 	}
-	baseURL, _ := url.Parse(pageURL)
 	linkURL, err := url.Parse(href)
 	if err != nil {
 		return
@@ -243,15 +243,16 @@ func appendResolvedHref(s *goquery.Selection, pageURL string, links *[]string, s
 
 func collectScrapeLinks(e *colly.HTMLElement, req *ScrapeRequest, scope *goquery.Selection, links *[]string) {
 	seen := make(map[string]struct{})
+	baseURL, _ := url.Parse(req.URL)
 	if linkSelExplicit(req) {
 		e.DOM.Find(strings.TrimSpace(req.LinkSelector)).Each(func(_ int, s *goquery.Selection) {
-			appendResolvedHref(s, req.URL, links, seen)
+			appendResolvedHref(s, baseURL, links, seen)
 		})
 		return
 	}
 	if scope != nil && scope.Length() > 0 {
 		scope.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
-			appendResolvedHref(s, req.URL, links, seen)
+			appendResolvedHref(s, baseURL, links, seen)
 		})
 	}
 }
