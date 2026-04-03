@@ -72,7 +72,7 @@ func BenchmarkLinkInArticleOrMain(b *testing.B) {
 	e := &colly.HTMLElement{DOM: sel}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		linkInArticleOrMain(e)
 	}
 }
@@ -84,7 +84,7 @@ func BenchmarkLinkInArticleOrMainNotFound(b *testing.B) {
 	e := &colly.HTMLElement{DOM: sel}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		linkInArticleOrMain(e)
 	}
 }
