@@ -1,10 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"net/url"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/gocolly/colly/v2"
 )
 
 func BenchmarkShouldScrapeURL(b *testing.B) {
@@ -58,5 +62,29 @@ func BenchmarkShouldScrapeURL(b *testing.B) {
 		for _, u := range testCases {
 			cm.shouldScrapeURL(u, baseURL, req, includeRe, excludeRe)
 		}
+	}
+}
+
+func BenchmarkLinkInArticleOrMain(b *testing.B) {
+	html := `<html><body><div class="container"><article><p><a href="/link">link</a></p></article></div></body></html>`
+	doc, _ := goquery.NewDocumentFromReader(bytes.NewReader([]byte(html)))
+	sel := doc.Find("a").First()
+	e := &colly.HTMLElement{DOM: sel}
+
+	b.ResetTimer()
+	for b.Loop() {
+		linkInArticleOrMain(e)
+	}
+}
+
+func BenchmarkLinkInArticleOrMainNotFound(b *testing.B) {
+	html := `<html><body><div class="container"><footer><p><a href="/link">link</a></p></footer></div></body></html>`
+	doc, _ := goquery.NewDocumentFromReader(bytes.NewReader([]byte(html)))
+	sel := doc.Find("a").First()
+	e := &colly.HTMLElement{DOM: sel}
+
+	b.ResetTimer()
+	for b.Loop() {
+		linkInArticleOrMain(e)
 	}
 }
