@@ -16,8 +16,11 @@ import (
 	"gocrawl/internal/db"
 	"gocrawl/internal/utils"
 
+	"github.com/andybalholm/cascadia"
 	"github.com/gocolly/colly/v2"
 )
+
+var articleMatcher = cascadia.MustCompile("article, main, [role=main], .post, .entry-content, .entry-title")
 
 // CrawlManager drains queued crawl jobs with a worker pool.
 type CrawlManager struct {
@@ -149,10 +152,14 @@ func (cm *CrawlManager) updateCrawlTotal(jobID string, total int) {
 
 // linkInArticleOrMain is true when the anchor sits under common article/main containers.
 func linkInArticleOrMain(e *colly.HTMLElement) bool {
-	node := e.DOM
-	for _, sel := range []string{"article", "main", "[role=main]", ".post", ".entry-content", ".entry-title"} {
-		if node.ParentsFiltered(sel).Length() > 0 {
-			return true
+	// ⚡ Bolt Optimization: Use a pre-compiled single cascadia matcher and manually traverse
+	// the HTML tree up to the root. Using goquery's ParentsFiltered in a loop was causing
+	// redundant parsing and memory overhead inside the hot loop.
+	for _, n := range e.DOM.Nodes {
+		for p := n.Parent; p != nil; p = p.Parent {
+			if articleMatcher.Match(p) {
+				return true
+			}
 		}
 	}
 	return false

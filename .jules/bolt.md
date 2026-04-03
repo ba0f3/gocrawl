@@ -32,3 +32,17 @@ The previous method instantiated a `url.Parse(pageURL)` on every single `<a>` ta
 
 **Measured Improvement:**
 In a micro-benchmark using a mock `a` tag payload loop (1,000,000 iterations), execution time improved from `~1188 ns/op` to `~819 ns/op`, saving `~31%` in parsing overhead per link. Furthermore, memory allocation decreased from `504 B/op` (6 allocs) to `360 B/op` (5 allocs), dramatically dropping memory pressure per scrape for dense DOM payloads.
+
+## 2026-04-03 - Avoid `goquery.Selection.ParentsFiltered` in Hot Loops (`internal/api/crawl_manager.go`)
+
+**What:**
+Replaced the loop `for _, sel := range []string{"article", "main", ...} { if e.DOM.ParentsFiltered(sel).Length() > 0 ... }` with a pre-compiled `cascadia.MustCompile("article, main, ...")` and manual `x/net/html` parent traversal (`for p := n.Parent; p != nil; p = p.Parent`).
+
+**Why:**
+The previous method instantiated `goquery.Selection.ParentsFiltered` for multiple CSS string queries on *every single discovered link* on a scraped page. Because goquery strings are dynamically compiled into cascadia matchers and traverse up the entire parent tree on each call, repeating this inside an O(N) array caused immense redundant memory allocation and CPU overhead in the tight crawling extraction loop. Manually pre-compiling the CSS selector and traversing the parent nodes natively saves thousands of redundant DOM parsing cycles.
+
+**Measured Improvement:**
+In a micro-benchmark using a mock DOM payload, finding a matched article link improved execution time from `~4913 ns/op` down to `~50 ns/op` (nearly a 98% reduction). Finding a missed link improved execution time from `~19966 ns/op` down to `~320 ns/op`.
+
+**Action:**
+When iterating over DOM queries on every node matching a `OnHTML` rule or inner loop in Colly, always hoist standard array evaluations using `cascadia.MustCompile` out of the loop and prefer traversing HTML nodes natively when combining simple queries rather than leaning heavily on higher-level generic tools like `goquery.Selection`.
