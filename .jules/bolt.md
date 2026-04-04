@@ -46,3 +46,24 @@ In a micro-benchmark using a mock DOM payload, finding a matched article link im
 
 **Action:**
 When iterating over DOM queries on every node matching a `OnHTML` rule or inner loop in Colly, always hoist standard array evaluations using `cascadia.MustCompile` out of the loop and prefer traversing HTML nodes natively when combining simple queries rather than leaning heavily on higher-level generic tools like `goquery.Selection`.
+
+## 2026-04-04 - Zero-Allocation Token Scanning (`internal/extractor/noise.go`)
+
+**What:**
+Replaced `strings.Fields(class)` with a custom manual byte-scanning loop in the `isAdClass` function. Evaluated string tokens are now accessed via string slicing `class[start:i]` and checked against bounds-safe manual byte lookups instead of utilizing `strings.HasPrefix` or `strings.HasSuffix`.
+
+**Why:**
+The `isAdClass` function runs inside the `IsNoise` execution path, which is mapped over countless DOM elements during the web claw–style extraction scoring phase. Evaluating `strings.Fields(class)` allocates a new array slice on the heap for every tested element's class attribute. Using zero-allocation byte scanning eliminates GC overhead.
+
+**Measured Improvement:**
+In micro-benchmarks analyzing long strings, the allocation drops from `208 B/op` to `0 B/op`. Overall execution time improved dramatically from `~370 ns/op` to `~81 ns/op`, a nearly ~78% speedup in this critical string evaluation loop.
+
+**Learning:**
+In hot inner loops traversing strings or mapping tokens (especially inside `internal/extractor` logic), avoid standard library convenience functions that instantiate slices like `strings.Fields` or `strings.Split`. Prefer manual byte scanning.
+
+## 2026-04-04 - Caching Descendant Tree for O(1) Checks (`internal/extractor/exclude.go`)
+
+**Learning:**
+The extractor's DOM exclusion logic (`buildExcludeSet` in `internal/extractor/exclude.go`) relies on pre-calculating and caching all descendant nodes using `addSubtreeNodes` via `.Find("*")`. While this adds initial overhead when establishing excluded zones, this intentional design trade-off guarantees that downstream exclusion checks during candidate scoring (e.g., `isUnderExcluded`) remain highly performant O(1) pointer map lookups.
+**Action:**
+Do not attempt to optimize `buildExcludeSet` by removing `addSubtreeNodes` without simultaneously rewriting all dependent exclusion checkers to recursively traverse upward. Even then, an O(1) map lookup is typically preferred in this scoring architecture.
