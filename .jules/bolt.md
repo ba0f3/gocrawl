@@ -53,7 +53,7 @@ When iterating over DOM queries on every node matching a `OnHTML` rule or inner 
 Replaced `strings.Fields(class)` with a custom manual byte-scanning loop in the `isAdClass` function. Evaluated string tokens are now accessed via string slicing `class[start:i]` and checked against bounds-safe manual byte lookups instead of utilizing `strings.HasPrefix` or `strings.HasSuffix`.
 
 **Why:**
-The `isAdClass` function runs inside the `IsNoise` execution path, which is mapped over countless DOM elements during the webclaw-style extraction scoring phase. Evaluating `strings.Fields(class)` allocates a new array slice on the heap for every tested element's class attribute. Using zero-allocation byte scanning eliminates GC overhead.
+The `isAdClass` function runs inside the `IsNoise` execution path, which is mapped over countless DOM elements during the web claw–style extraction scoring phase. Evaluating `strings.Fields(class)` allocates a new array slice on the heap for every tested element's class attribute. Using zero-allocation byte scanning eliminates GC overhead.
 
 **Measured Improvement:**
 In micro-benchmarks analyzing long strings, the allocation drops from `208 B/op` to `0 B/op`. Overall execution time improved dramatically from `~370 ns/op` to `~81 ns/op`, a nearly ~78% speedup in this critical string evaluation loop.

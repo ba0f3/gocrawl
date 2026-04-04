@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
@@ -125,9 +126,8 @@ func isStructuralID(id string) bool {
 // heap allocations.
 func isAdClass(class string) bool {
 	start := -1
-	for i := 0; i < len(class); i++ {
-		c := class[i]
-		isSpace := c == ' ' || c == '\t' || c == '\n' || c == '\r'
+	for i, c := range class {
+		isSpace := unicode.IsSpace(c)
 		if !isSpace && start == -1 {
 			start = i
 		} else if isSpace && start != -1 {
