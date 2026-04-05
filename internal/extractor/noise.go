@@ -39,6 +39,11 @@ var cookieConsentIDPrefixes = []string{
 	"gdpr", "consent-", "cmp-", "sp_message", "qc-cmp", "trustarc", "evidon",
 }
 
+var cookieConsentClassPrefixes = []string{
+	"onetrust", "optanon", "ot-sdk", "cookiebot", "cybotcookiebot", "cookie-law",
+	"gdpr", "consent-", "sp_message", "trustarc", "evidon",
+}
+
 var structuralIDSuffixes = []string{"portal", "root", "container", "wrapper", "mount", "app"}
 
 // IsNoise reports whether this node is structural/UI noise (nav, ads, cookie banners, etc.).
@@ -64,22 +69,30 @@ func IsNoise(sel *goquery.Selection) bool {
 	}
 	if class, ok := sel.Attr("class"); ok {
 		lc := strings.ToLower(class)
-		for _, tok := range strings.Fields(lc) {
-			if _, hit := noiseClassesExact[tok]; hit {
-				return true
-			}
-			if strings.HasPrefix(tok, "footer") || strings.HasPrefix(tok, "header-") || strings.HasPrefix(tok, "nav-") {
-				return true
-			}
-		}
-		if isAdClass(lc) {
-			return true
-		}
-		if hasNoiseClassPattern(lc) {
-			return true
-		}
-		for _, p := range cookieConsentIDPrefixes {
+		for _, p := range longNoisePatterns {
 			if strings.Contains(lc, p) {
+				return true
+			}
+		}
+
+		// ⚡ Bolt Optimization: Use unified zero-allocation token scanning
+		// instead of multiple passes with strings.Fields, isAdClass, and hasNoiseClassPattern.
+		start := -1
+		for i, r := range lc {
+			isSpace := unicode.IsSpace(r)
+			if !isSpace && start == -1 {
+				start = i
+			} else if isSpace && start != -1 {
+				tok := lc[start:i]
+				start = -1
+
+				if isNoiseToken(tok) {
+					return true
+				}
+			}
+		}
+		if start != -1 {
+			if isNoiseToken(lc[start:]) {
 				return true
 			}
 		}
@@ -120,25 +133,39 @@ func isStructuralID(id string) bool {
 	return false
 }
 
-// ⚡ Bolt Optimization: Use zero-allocation token scanning instead of strings.Fields.
-// Because isAdClass runs in a hot loop mapping over HTML classes during DOM noise filtering,
-// avoiding the slice allocation of strings.Fields drops execution time by ~75% and eliminates
-// heap allocations.
-func isAdClass(class string) bool {
-	start := -1
-	for i, c := range class {
-		isSpace := unicode.IsSpace(c)
-		if !isSpace && start == -1 {
-			start = i
-		} else if isSpace && start != -1 {
-			if isAdClassToken(class[start:i]) {
-				return true
-			}
-			start = -1
+func isNoiseToken(tok string) bool {
+	for _, p := range cookieConsentClassPrefixes {
+		if strings.HasPrefix(tok, p) {
+			return true
 		}
 	}
-	if start != -1 {
-		return isAdClassToken(class[start:])
+	if _, hit := noiseClassesExact[tok]; hit {
+		return true
+	}
+	if strings.HasPrefix(tok, "footer") || strings.HasPrefix(tok, "header-") || strings.HasPrefix(tok, "nav-") {
+		return true
+	}
+	if isAdClassToken(tok) {
+		return true
+	}
+
+	t := tok
+	if idx := strings.LastIndex(t, ":"); idx >= 0 {
+		t = t[idx+1:]
+		if _, hit := noiseClassesExact[t]; hit {
+			return true
+		}
+		if strings.HasPrefix(t, "footer") || strings.HasPrefix(t, "header-") || strings.HasPrefix(t, "nav-") {
+			return true
+		}
+		if isAdClassToken(t) {
+			return true
+		}
+	}
+	for _, p := range shortNoisePatterns {
+		if wordBoundaryMatch(t, p) {
+			return true
+		}
 	}
 	return false
 }
@@ -165,26 +192,6 @@ var longNoisePatterns = []string{
 }
 
 var shortNoisePatterns = []string{"nav", "top", "side", "menu", "widget", "header", "footer"}
-
-func hasNoiseClassPattern(class string) bool {
-	for _, p := range longNoisePatterns {
-		if strings.Contains(class, p) {
-			return true
-		}
-	}
-	for _, tok := range strings.Fields(class) {
-		t := tok
-		if idx := strings.LastIndex(t, ":"); idx >= 0 {
-			t = t[idx+1:]
-		}
-		for _, p := range shortNoisePatterns {
-			if wordBoundaryMatch(t, p) {
-				return true
-			}
-		}
-	}
-	return false
-}
 
 func wordBoundaryMatch(text, pattern string) bool {
 	start := 0
