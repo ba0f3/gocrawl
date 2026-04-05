@@ -39,6 +39,11 @@ var cookieConsentIDPrefixes = []string{
 	"gdpr", "consent-", "cmp-", "sp_message", "qc-cmp", "trustarc", "evidon",
 }
 
+var cookieConsentClassPrefixes = []string{
+	"onetrust", "optanon", "ot-sdk", "cookiebot", "cybotcookiebot", "cookie-law",
+	"gdpr", "consent-", "sp_message", "trustarc", "evidon",
+}
+
 var structuralIDSuffixes = []string{"portal", "root", "container", "wrapper", "mount", "app"}
 
 // IsNoise reports whether this node is structural/UI noise (nav, ads, cookie banners, etc.).
@@ -129,7 +134,7 @@ func isStructuralID(id string) bool {
 }
 
 func isNoiseToken(tok string) bool {
-	for _, p := range cookieConsentIDPrefixes {
+	for _, p := range cookieConsentClassPrefixes {
 		if strings.HasPrefix(tok, p) {
 			return true
 		}
