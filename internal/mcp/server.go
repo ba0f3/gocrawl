@@ -12,6 +12,7 @@ import (
 	"gocrawl/internal/config"
 	"gocrawl/internal/crawler"
 	"gocrawl/internal/db"
+	"gocrawl/internal/utils"
 
 	"github.com/gocolly/colly/v2"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -250,13 +251,13 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 
 		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, s.cfg)
 		if err != nil {
-			log.Printf("Error scraping page %s: %v", r.Request.URL, err)
+			log.Printf("Error scraping page %s: %v", utils.SanitizeForLog(r.Request.URL.String()), utils.SanitizeForLog(err.Error()))
 			return
 		}
 
 		// ⚡ Bolt Optimization: Log extraction results size to help performance audits
 		log.Printf("Successfully scraped %s: %d chars markdown, %d links",
-			r.Request.URL, len(result.Markdown), len(result.Links))
+			utils.SanitizeForLog(r.Request.URL.String()), len(result.Markdown), len(result.Links))
 
 		crawlMu.Lock()
 		job.mu.Lock()
@@ -265,11 +266,11 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		job.mu.Unlock()
 		crawlMu.Unlock()
 
-		log.Printf("Crawl progress: %d/%d pages (visited %s)", progress, job.Total, r.Request.URL)
+		log.Printf("Crawl progress: %d/%d pages (visited %s)", progress, job.Total, utils.SanitizeForLog(r.Request.URL.String()))
 	})
 
 	c.OnError(func(r *colly.Response, err error) {
-		log.Printf("Error visiting %s: %v", r.Request.URL, err)
+		log.Printf("Error visiting %s: %v", utils.SanitizeForLog(r.Request.URL.String()), utils.SanitizeForLog(err.Error()))
 	})
 
 	// Add transport if configured
