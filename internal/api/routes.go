@@ -12,6 +12,7 @@ import (
 	"gocrawl/internal/db"
 	"gocrawl/internal/mcp"
 	"gocrawl/internal/user"
+	"gocrawl/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -289,8 +290,8 @@ func (h *Handler) SSEScrape(c *gin.Context) {
 	go func() {
 		var scrapeReq crawler.ScrapeRequest
 		if err := json.NewDecoder(req.Body).Decode(&scrapeReq); err != nil {
-			log.Printf("Error decoding request: %v", err)
-			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": err.Error()}}
+			log.Printf("Error decoding request: %v", utils.SanitizeForLog(err.Error()))
+			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": "Invalid request body"}}
 			return
 		}
 
@@ -303,8 +304,8 @@ func (h *Handler) SSEScrape(c *gin.Context) {
 
 		result, err := crawler.ScrapeURLWithContext(req.Context(), &scrapeReq, h.Cfg)
 		if err != nil {
-			log.Printf("Error scraping URL: %v", err)
-			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": err.Error()}}
+			log.Printf("Error scraping URL: %v", utils.SanitizeForLog(err.Error()))
+			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": "Failed to scrape URL"}}
 			return
 		}
 
