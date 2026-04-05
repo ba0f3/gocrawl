@@ -86,47 +86,14 @@ func IsNoise(sel *goquery.Selection) bool {
 				tok := lc[start:i]
 				start = -1
 
-				if _, hit := noiseClassesExact[tok]; hit {
+				if isNoiseToken(tok) {
 					return true
-				}
-				if strings.HasPrefix(tok, "footer") || strings.HasPrefix(tok, "header-") || strings.HasPrefix(tok, "nav-") {
-					return true
-				}
-				if isAdClassToken(tok) {
-					return true
-				}
-
-				t := tok
-				if idx := strings.LastIndex(t, ":"); idx >= 0 {
-					t = t[idx+1:]
-				}
-				for _, p := range shortNoisePatterns {
-					if wordBoundaryMatch(t, p) {
-						return true
-					}
 				}
 			}
 		}
 		if start != -1 {
-			tok := lc[start:]
-			if _, hit := noiseClassesExact[tok]; hit {
+			if isNoiseToken(lc[start:]) {
 				return true
-			}
-			if strings.HasPrefix(tok, "footer") || strings.HasPrefix(tok, "header-") || strings.HasPrefix(tok, "nav-") {
-				return true
-			}
-			if isAdClassToken(tok) {
-				return true
-			}
-
-			t := tok
-			if idx := strings.LastIndex(t, ":"); idx >= 0 {
-				t = t[idx+1:]
-			}
-			for _, p := range shortNoisePatterns {
-				if wordBoundaryMatch(t, p) {
-					return true
-				}
 			}
 		}
 	}
@@ -160,6 +127,29 @@ func IsNoiseDescendant(sel *goquery.Selection) bool {
 func isStructuralID(id string) bool {
 	for _, s := range structuralIDSuffixes {
 		if strings.Contains(id, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func isNoiseToken(tok string) bool {
+	if _, hit := noiseClassesExact[tok]; hit {
+		return true
+	}
+	if strings.HasPrefix(tok, "footer") || strings.HasPrefix(tok, "header-") || strings.HasPrefix(tok, "nav-") {
+		return true
+	}
+	if isAdClassToken(tok) {
+		return true
+	}
+
+	t := tok
+	if idx := strings.LastIndex(t, ":"); idx >= 0 {
+		t = t[idx+1:]
+	}
+	for _, p := range shortNoisePatterns {
+		if wordBoundaryMatch(t, p) {
 			return true
 		}
 	}
