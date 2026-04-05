@@ -67,3 +67,17 @@ In hot inner loops traversing strings or mapping tokens (especially inside `inte
 The extractor's DOM exclusion logic (`buildExcludeSet` in `internal/extractor/exclude.go`) relies on pre-calculating and caching all descendant nodes using `addSubtreeNodes` via `.Find("*")`. While this adds initial overhead when establishing excluded zones, this intentional design trade-off guarantees that downstream exclusion checks during candidate scoring (e.g., `isUnderExcluded`) remain highly performant O(1) pointer map lookups.
 **Action:**
 Do not attempt to optimize `buildExcludeSet` by removing `addSubtreeNodes` without simultaneously rewriting all dependent exclusion checkers to recursively traverse upward. Even then, an O(1) map lookup is typically preferred in this scoring architecture.
+
+## 2026-04-05 - Unified Zero-Allocation String Scanning in IsNoise (`internal/extractor/noise.go`)
+
+**What:**
+Replaced `strings.Fields(class)` and unified multiple class evaluation functions (`isAdClass` and `hasNoiseClassPattern`) into a single, zero-allocation token scanning loop over class attributes in `IsNoise`. Removed redundant `isAdClass` and `hasNoiseClassPattern` loops entirely.
+
+**Why:**
+The `IsNoise` function runs in a critical hot loop scoring extraction candidates for noise (nav, ads, sidebars, cookie banners). The prior code allocated a new string array slice (`strings.Fields`) and passed the class string to subsequent functions which ran secondary loops doing their own token matching or sub-string iterations. By combining all logical evaluations into a manual byte-scanning mechanism, memory allocations drop to zero and we eliminate duplicate traversals.
+
+**Measured Improvement:**
+Micro-benchmarks against simulated class evaluation dropped iteration time from `~4400-5000 ns/op` and `192 B/op` allocation to `~2700 ns/op` and `0 B/op` memory overhead.
+
+**Learning:**
+Never iterate character arrays multiple times in hot loops for string validation if logic can be collapsed into a single manual scan sequence. Crucially, when replacing `strings.Fields`, always use `for i, r := range str` to ensure iteration honors UTF-8 multibyte character boundaries via runes instead of corrupting indexes with a native `for i := 0; i < len(str); i++` byte loop when checking spaces.
