@@ -292,6 +292,7 @@ func (h *Handler) SSEScrape(c *gin.Context) {
 		if err := json.NewDecoder(req.Body).Decode(&scrapeReq); err != nil {
 			log.Printf("Error decoding request: %v", utils.SanitizeForLog(err.Error()))
 			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": "Invalid request body"}}
+			sseClient.Done <- true
 			return
 		}
 
@@ -306,6 +307,7 @@ func (h *Handler) SSEScrape(c *gin.Context) {
 		if err != nil {
 			log.Printf("Error scraping URL: %v", utils.SanitizeForLog(err.Error()))
 			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": "Failed to scrape URL"}}
+			sseClient.Done <- true
 			return
 		}
 

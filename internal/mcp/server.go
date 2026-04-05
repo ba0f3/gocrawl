@@ -251,7 +251,7 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 
 		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, s.cfg)
 		if err != nil {
-			log.Printf("Error scraping page %s: %v", utils.SanitizeForLog(r.Request.URL.String()), err)
+			log.Printf("Error scraping page %s: %v", utils.SanitizeForLog(r.Request.URL.String()), utils.SanitizeForLog(err.Error()))
 			return
 		}
 
@@ -270,7 +270,7 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 	})
 
 	c.OnError(func(r *colly.Response, err error) {
-		log.Printf("Error visiting %s: %v", utils.SanitizeForLog(r.Request.URL.String()), err)
+		log.Printf("Error visiting %s: %v", utils.SanitizeForLog(r.Request.URL.String()), utils.SanitizeForLog(err.Error()))
 	})
 
 	// Add transport if configured
