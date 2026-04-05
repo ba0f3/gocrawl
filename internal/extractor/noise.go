@@ -64,11 +64,6 @@ func IsNoise(sel *goquery.Selection) bool {
 	}
 	if class, ok := sel.Attr("class"); ok {
 		lc := strings.ToLower(class)
-		for _, p := range cookieConsentIDPrefixes {
-			if strings.Contains(lc, p) {
-				return true
-			}
-		}
 		for _, p := range longNoisePatterns {
 			if strings.Contains(lc, p) {
 				return true
@@ -134,6 +129,11 @@ func isStructuralID(id string) bool {
 }
 
 func isNoiseToken(tok string) bool {
+	for _, p := range cookieConsentIDPrefixes {
+		if strings.HasPrefix(tok, p) {
+			return true
+		}
+	}
 	if _, hit := noiseClassesExact[tok]; hit {
 		return true
 	}
@@ -147,6 +147,15 @@ func isNoiseToken(tok string) bool {
 	t := tok
 	if idx := strings.LastIndex(t, ":"); idx >= 0 {
 		t = t[idx+1:]
+		if _, hit := noiseClassesExact[t]; hit {
+			return true
+		}
+		if strings.HasPrefix(t, "footer") || strings.HasPrefix(t, "header-") || strings.HasPrefix(t, "nav-") {
+			return true
+		}
+		if isAdClassToken(t) {
+			return true
+		}
 	}
 	for _, p := range shortNoisePatterns {
 		if wordBoundaryMatch(t, p) {
