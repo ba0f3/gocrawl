@@ -242,12 +242,13 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		default:
 		}
 
-		// ⚡ Bolt Optimization: Perform actual scrape and track progress metrics.
 		scrapeOpts := crawler.ScrapeRequest{
-			URL:               r.Request.URL.String(),
-			Formats:           []string{"markdown", "html", "rawHtml"},
-			PreFetchedBody:    r.Body,
-			PreFetchedHeaders: r.Headers.Clone(),
+			URL:            r.Request.URL.String(),
+			Formats:        []string{"markdown", "html", "rawHtml"},
+			PreFetchedBody: r.Body,
+		}
+		if r.Headers != nil {
+			scrapeOpts.PreFetchedHeaders = r.Headers.Clone()
 		}
 
 		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, s.cfg)
@@ -256,7 +257,6 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 			return
 		}
 
-		// ⚡ Bolt Optimization: Log extraction results size to help performance audits
 		log.Printf("Successfully scraped %s: %d chars markdown, %d links",
 			utils.SanitizeForLog(r.Request.URL.String()), len(result.Markdown), len(result.Links))
 
