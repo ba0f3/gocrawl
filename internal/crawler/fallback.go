@@ -1,10 +1,12 @@
 package crawler
 
 import (
+	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	isantibot "github.com/ba0f3/is-antibot-go"
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -45,6 +47,8 @@ type FallbackCriteria struct {
 	OnlyMain    bool
 	StatusCodes []int
 	PageBody    []byte
+	URL         string
+	Headers     http.Header
 }
 
 // ShouldChromedpFallback reports whether automatic chromedp retry is warranted and a short tag for metadata.
@@ -71,6 +75,9 @@ func ShouldChromedpFallback(fc *FallbackCriteria) (bool, string) {
 			}
 		}
 	}
+	if yes, tag := antibotWAFTrigger(fc); yes {
+		return true, tag
+	}
 	sample := htmlSampleForHeuristics(fc.Result, fc.PageBody)
 	if looksLikeChallengePage(sample) {
 		return true, "challenge_html"
@@ -86,6 +93,35 @@ func ShouldChromedpFallback(fc *FallbackCriteria) (bool, string) {
 		return true, "thin_markdown"
 	}
 	return false, ""
+}
+
+// antibotWAFTrigger uses github.com/ba0f3/is-antibot-go to detect WAF / bot-challenge responses
+// so chromedp can retry when Colly received a block or interstitial page with a normal HTTP status.
+func antibotWAFTrigger(fc *FallbackCriteria) (bool, string) {
+	if fc == nil {
+		return false, ""
+	}
+	html := htmlSampleForHeuristics(fc.Result, fc.PageBody)
+	status := 0
+	if fc.Result != nil {
+		if s := fc.Result.Metadata["statusCode"]; s != "" {
+			status, _ = strconv.Atoi(s)
+		}
+	}
+	out := isantibot.Detect(isantibot.Input{
+		Headers:    fc.Headers,
+		HTML:       html,
+		URL:        fc.URL,
+		StatusCode: status,
+	})
+	if !out.Detected {
+		return false, ""
+	}
+	prov := "unknown"
+	if out.Provider != nil && *out.Provider != "" {
+		prov = *out.Provider
+	}
+	return true, "antibot_" + prov
 }
 
 func htmlSampleForHeuristics(result *ScrapeResult, pageBody []byte) string {

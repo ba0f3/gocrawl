@@ -199,7 +199,7 @@ Environment variables can be set in the `.env` file or as system environment var
 | `LLM_TIMEOUT` | HTTP client timeout for LLM calls (default `120s`) |
 | `LIGHTPANDA_WS_URL` | Optional full CDP WebSocket URL (e.g. from `GET http://host:9222/json/version` → `webSocketDebuggerUrl`) |
 | `LIGHTPANDA_HTTP_URL` | Optional HTTP base (e.g. `http://lightpanda:9222`); first chromedp use resolves and caches `webSocketDebuggerUrl` |
-| `CHROMEDP_AUTO_FALLBACK` | When `true` (default), automatically use chromedp after Colly when heuristics match (thin main text, SPA shell, challenge HTML, configured status codes, errors). Set `false` to only use chromedp with JSON `forceBrowser: true` |
+| `CHROMEDP_AUTO_FALLBACK` | When `true` (default), automatically use chromedp after Colly when heuristics match (WAF/antibot signals via [is-antibot-go](https://github.com/ba0f3/is-antibot-go), thin main text, SPA shell, challenge HTML, configured status codes, errors). Set `false` to only use chromedp with JSON `forceBrowser: true` |
 | `CHROMEDP_FALLBACK_STATUS_CODES` | Comma-separated HTTP statuses that trigger auto fallback (default `401,403,429,503` if unset) |
 | `CHROMEDP_MAX_CONCURRENT` | Max concurrent chromedp sessions (default `8` if unset or `0`) |
 | `CHROMEDP_LOAD_WAIT_TIMEOUT` | Max time to poll `document.readyState` after navigation (default `30s`; capped under the scrape timeout). Stops on **`complete`** or on two consecutive **`interactive`** reads (SPAs often never reach `complete` after XHRs, which used to spin until Lightpanda’s CDP timeout). Short `Evaluate` calls only |
@@ -254,7 +254,7 @@ export BASE_URL="http://localhost:8151"
 
 If `contentSelector` or `contentSelectors` are set, they **replace** the built-in main-content list (`main`, `article`, …). If no selector matches, the extractor falls back to `body`. `onlyMainContent` applies only when you do **not** set custom content selectors.
 
-When chromedp runs (auto fallback or `forceBrowser`), **`metadata`** may include `extractor: chromedp` and **`chromedpTrigger`** (`thin_markdown`, `spa_shell`, `csr_framework` for Vue/React/Next/Nuxt/Angular/SvelteKit/Remix/Astro/Vite-style shells, `challenge_html`, `status_403`, `visit_error`, etc.).
+When chromedp runs (auto fallback or `forceBrowser`), **`metadata`** may include `extractor: chromedp` and **`chromedpTrigger`** (`antibot_<provider>` when a WAF/challenge is detected, e.g. `antibot_cloudflare`, `antibot_hcaptcha`; `thin_markdown`, `spa_shell`, `csr_framework` for Vue/React/Next/Nuxt/Angular/SvelteKit/Remix/Astro/Vite-style shells, `challenge_html`, `status_403`, `visit_error`, etc.).
 
 ### Crawl body (`POST /v1/crawl`)
 

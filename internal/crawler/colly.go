@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -34,6 +35,8 @@ type ScrapeResult struct {
 type ScrapeRequest struct {
 	URL            string `json:"url"`
 	PreFetchedBody []byte `json:"-"`
+	// PreFetchedHeaders is the Colly/crawl response headers when PreFetchedBody is set (improves WAF detection for chromedp fallback).
+	PreFetchedHeaders http.Header `json:"-"`
 	// OnlyMainContent: omit or true = use main/article heuristics; false = full <body> (see EffectiveOnlyMainContent).
 	OnlyMainContent    *bool    `json:"onlyMainContent,omitempty"`
 	IncludeTags        []string `json:"includeTags"`
@@ -73,14 +76,20 @@ func wantsFormat(req *ScrapeRequest, format string) bool {
 	return contains(req.Formats, format)
 }
 
-func finalizeScrape(ctx context.Context, req *ScrapeRequest, cfg *config.Config, timeout time.Duration, result *ScrapeResult, visitErr error, pageBody []byte) (*ScrapeResult, error) {
+func finalizeScrape(ctx context.Context, req *ScrapeRequest, cfg *config.Config, timeout time.Duration, result *ScrapeResult, visitErr error, pageBody []byte, respHeaders http.Header) (*ScrapeResult, error) {
 	if cfg != nil && ChromedpConfigured(cfg) && cfg.Crawler.ChromedpAutoFallback {
+		pageURL := ""
+		if req != nil {
+			pageURL = req.URL
+		}
 		if ok, why := ShouldChromedpFallback(&FallbackCriteria{
 			VisitErr:    visitErr,
 			Result:      result,
 			OnlyMain:    EffectiveOnlyMainContent(req),
 			StatusCodes: cfg.Crawler.ChromedpFallbackStatusCodes,
 			PageBody:    pageBody,
+			URL:         pageURL,
+			Headers:     respHeaders,
 		}); ok {
 			html, err := ScrapeHTMLViaChromedp(cfg, req, timeout)
 			if err == nil {
@@ -308,7 +317,7 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 			populateScrapeResultFromBody(e, req, result)
 		}
 
-		return finalizeScrape(ctx, req, cfg, timeout, result, nil, req.PreFetchedBody)
+		return finalizeScrape(ctx, req, cfg, timeout, result, nil, req.PreFetchedBody, req.PreFetchedHeaders)
 	}
 
 	c := colly.NewCollector(
@@ -342,8 +351,12 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 	}
 
 	var pageBody []byte
+	var pageHeaders http.Header
 	c.OnResponse(func(r *colly.Response) {
 		result.Metadata["statusCode"] = strconv.Itoa(r.StatusCode)
+		if r.Headers != nil {
+			pageHeaders = r.Headers.Clone()
+		}
 		n := len(r.Body)
 		if n > maxPageBodyCopy {
 			n = maxPageBodyCopy
@@ -362,7 +375,7 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 	})
 
 	visitErr := c.Visit(req.URL)
-	res, err := finalizeScrape(ctx, req, cfg, timeout, result, visitErr, pageBody)
+	res, err := finalizeScrape(ctx, req, cfg, timeout, result, visitErr, pageBody, pageHeaders)
 	summarizeResult(ctx, req, cfg, res)
 	return res, err
 }

@@ -275,6 +275,10 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 		if crawlSels := effectiveCrawlLinkSelectors(req); len(crawlSels) > 0 && strings.TrimSpace(scrapeOpts.LinkSelector) == "" {
 			scrapeOpts.LinkSelector = strings.Join(crawlSels, ", ")
 		}
+		scrapeOpts.PreFetchedBody = r.Body
+		if r.Headers != nil {
+			scrapeOpts.PreFetchedHeaders = r.Headers.Clone()
+		}
 
 		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, cm.cfg)
 		if err != nil {

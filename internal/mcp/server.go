@@ -244,9 +244,10 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 
 		// ⚡ Bolt Optimization: Perform actual scrape and track progress metrics.
 		scrapeOpts := crawler.ScrapeRequest{
-			URL:            r.Request.URL.String(),
-			Formats:        []string{"markdown", "html", "rawHtml"},
-			PreFetchedBody: r.Body,
+			URL:               r.Request.URL.String(),
+			Formats:           []string{"markdown", "html", "rawHtml"},
+			PreFetchedBody:    r.Body,
+			PreFetchedHeaders: r.Headers.Clone(),
 		}
 
 		result, err := crawler.ScrapeURLWithContext(ctx, &scrapeOpts, s.cfg)
