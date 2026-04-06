@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -17,11 +16,11 @@ func main() {
 	baseURL := "http://localhost:8151/v1/mcp"
 
 	// Example 1: Regular HTTP request
-	fmt.Println("=== Example 1: Regular HTTP Request ===")
+	log.Printf("=== Example 1: Regular HTTP Request ===\n")
 	regularHTTPExample(baseURL)
 
 	// Example 2: SSE streaming request
-	fmt.Println("\n=== Example 2: SSE Streaming Request ===")
+	log.Printf("\n=== Example 2: SSE Streaming Request ===\n")
 	sseStreamingExample(baseURL)
 }
 
@@ -52,7 +51,7 @@ func regularHTTPExample(baseURL string) {
 		log.Fatal("Error reading response:", err)
 	}
 
-	fmt.Printf("Response: %s\n", string(body))
+	log.Printf("Response: %s\n", string(body))
 }
 
 func sseStreamingExample(baseURL string) {
@@ -104,9 +103,9 @@ func sseStreamingExample(baseURL string) {
 			// Parse JSON data
 			var event map[string]interface{}
 			if err := json.Unmarshal([]byte(data), &event); err == nil {
-				fmt.Printf("Event Type: %v\n", event["type"])
-				fmt.Printf("Event Data: %v\n", event["data"])
-				fmt.Println("---")
+				log.Printf("Event Type: %v\n", event["type"])
+				log.Printf("Event Data: %v\n", event["data"])
+				log.Printf("---\n")
 			}
 		}
 	}
