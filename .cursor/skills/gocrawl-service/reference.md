@@ -24,7 +24,22 @@ docker compose up --build -d
 
 4. Base URL for HTTP calls: **`http://localhost:8151`** (or your host). API routes live under **`/v1`**.
 
-5. **Lightpanda / chromedp:** With Compose, **`LIGHTPANDA_HTTP_URL`** defaults to **`http://lightpanda:9222`** on the **gocrawl** service so the process can resolve the CDP socket via **`/json/version`** (no manual `ws://…` paste). Alternatively set **`LIGHTPANDA_WS_URL`** to the full `webSocketDebuggerUrl`. Auto fallback uses chromedp after Colly for errors, selected HTTP statuses (401/403/429/503 by default), challenge-style HTML, SPA shells, or very thin main markdown; set **`CHROMEDP_AUTO_FALLBACK=false`** to disable that and use only JSON **`forceBrowser: true`**. After navigation, chromedp polls **`document.readyState`** with short CDP calls until **`complete`** or **stable `interactive`** (many SPAs never fire `complete` after API calls), then optional **`CHROMEDP_NAV_WAIT`** and hydration delays are **paced** with tiny CDP evaluations so Lightpanda is less likely to log **CDP timeout** on an idle socket while the page finishes XHR-driven rendering. See `README.md` (Configuration) for **`CHROMEDP_*`** tuning and anti-bot limitations.
+5. **Lightpanda (CDP endpoint):** With Compose, **`LIGHTPANDA_HTTP_URL`** defaults to **`http://lightpanda:9222`** on the **gocrawl** service. The process resolves the CDP WebSocket via **`/json/version`**, so you usually do not need to paste a full **`ws://…`** URL. Alternatively set **`LIGHTPANDA_WS_URL`** to the browser’s `webSocketDebuggerUrl`.
+
+6. **Auto-fallback vs forced browser:** When chromedp is configured, Colly can automatically retry with chromedp unless **`CHROMEDP_AUTO_FALLBACK=false`**. To skip HTTP/Colly and use only the browser path, use JSON **`forceBrowser: true`** on scrape requests.
+
+   Fallback to chromedp is considered when any of these apply (non-exhaustive):
+
+   - Colly/visit errors
+   - Response status in the configured list (defaults include **401**, **403**, **429**, **503**)
+   - WAF / antibot hints ([is-antibot-go](https://github.com/ba0f3/is-antibot-go); responses may include metadata like **`chromedpTrigger`** e.g. **`antibot_cloudflare`**)
+   - Challenge-style HTML (captcha / “checking your browser” patterns)
+   - SPA-style shells (little static text, framework markers)
+   - Very thin main markdown when **`onlyMainContent`**-style extraction is in effect
+
+7. **Chromedp runtime (after navigation):** The browser path polls **`document.readyState`** with short CDP calls until **`complete`** or a **stable `interactive`** (many SPAs never reach **`complete`** after XHR). **`CHROMEDP_NAV_WAIT`** and hydration polling are **paced** with small CDP evaluations so Lightpanda is less likely to hit **CDP timeout** on an idle socket while the page keeps rendering.
+
+   For **`CHROMEDP_*`** env tuning, edge cases, and anti-bot limitations, see **`README.md`** (Configuration).
 
 ### Optional MongoDB overlay
 

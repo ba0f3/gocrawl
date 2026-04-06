@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -60,6 +61,33 @@ func TestShouldChromedpFallback_statusCodes(t *testing.T) {
 	})
 	if !yes3 || tag3 != "status_500" {
 		t.Fatalf("custom codes: got %v %q", yes3, tag3)
+	}
+}
+
+func TestShouldChromedpFallback_antibotHeader(t *testing.T) {
+	h := http.Header{}
+	h.Set("cf-mitigated", "challenge")
+	res := &ScrapeResult{Metadata: map[string]string{"statusCode": "200"}}
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		Result:  res,
+		Headers: h,
+		URL:     "https://example.com/page",
+	})
+	if !yes || tag != "antibot_cloudflare" {
+		t.Fatalf("got %v %q want antibot_cloudflare", yes, tag)
+	}
+}
+
+func TestShouldChromedpFallback_antibotHTML(t *testing.T) {
+	html := `<html><head></head><body><script src="https://hcaptcha.com/1/api.js"></script></body></html>`
+	res := &ScrapeResult{Metadata: map[string]string{"statusCode": "200"}}
+	yes, tag := ShouldChromedpFallback(&FallbackCriteria{
+		Result:   res,
+		PageBody: []byte(html),
+		URL:      "https://example.com/",
+	})
+	if !yes || tag != "antibot_hcaptcha" {
+		t.Fatalf("got %v %q want antibot_hcaptcha", yes, tag)
 	}
 }
 
