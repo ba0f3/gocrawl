@@ -54,7 +54,11 @@ func writeJSON(c *gin.Context, statusCode int, data interface{}, err error) {
 	resp := ApiResponse{}
 	if err != nil {
 		resp.Success = false
-		resp.Error = err.Error()
+		if statusCode >= http.StatusInternalServerError {
+			resp.Error = "An internal server error occurred"
+		} else {
+			resp.Error = err.Error()
+		}
 	} else {
 		resp.Success = true
 		resp.Data = data
