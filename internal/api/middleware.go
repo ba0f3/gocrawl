@@ -24,20 +24,44 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// CORSMiddleware adds CORS headers
-func CORSMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
+// applyCORSHeaders is a shared helper that sets CORS headers and handles preflight OPTIONS.
+// It returns true if the request was handled (short-circuited).
+func applyCORSHeaders(w http.ResponseWriter, r *http.Request, allowedOrigins []string) bool {
+	origin := r.Header.Get("Origin")
+	if origin != "" {
+		allowed := false
+		for _, o := range allowedOrigins {
+			if o == "*" || o == origin {
+				allowed = true
+				break
+			}
 		}
+		if allowed {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Add("Vary", "Origin")
+		}
+	}
 
-		next.ServeHTTP(w, r)
-	})
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return true
+	}
+	return false
+}
+
+// CORSMiddleware adds CORS headers
+func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if applyCORSHeaders(w, r, allowedOrigins) {
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // AuthMiddleware validates API keys
@@ -128,14 +152,10 @@ func GinLoggingMiddleware() gin.HandlerFunc {
 }
 
 // GinCORSMiddleware adds CORS headers and handles OPTIONS.
-func GinCORSMiddleware() gin.HandlerFunc {
+func GinCORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		h := c.Writer.Header()
-		h.Set("Access-Control-Allow-Origin", "*")
-		h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusOK)
+		if applyCORSHeaders(c.Writer, c.Request, allowedOrigins) {
+			c.Abort()
 			return
 		}
 		c.Next()

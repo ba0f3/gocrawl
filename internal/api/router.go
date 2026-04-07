@@ -22,7 +22,7 @@ func NewRouter(h *Handler, cfg *config.Config) *gin.Engine {
 	r.Use(gin.Recovery())
 
 	v1 := r.Group("/v1")
-	v1.Use(GinLoggingMiddleware(), GinCORSMiddleware())
+	v1.Use(GinLoggingMiddleware(), GinCORSMiddleware(cfg.Security.AllowedOrigins))
 	if cfg.RateLimit.Requests > 0 && cfg.RateLimit.Window > 0 {
 		v1.Use(GinRateLimitMiddleware(cfg.RateLimit))
 	}
