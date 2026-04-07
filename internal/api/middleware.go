@@ -29,6 +29,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 func applyCORSHeaders(w http.ResponseWriter, r *http.Request, allowedOrigins []string) bool {
 	origin := r.Header.Get("Origin")
 	if origin != "" {
+		w.Header().Add("Vary", "Origin")
 		allowed := false
 		for _, o := range allowedOrigins {
 			if o == "*" || o == origin {
@@ -38,7 +39,6 @@ func applyCORSHeaders(w http.ResponseWriter, r *http.Request, allowedOrigins []s
 		}
 		if allowed {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Add("Vary", "Origin")
 		}
 	}
 

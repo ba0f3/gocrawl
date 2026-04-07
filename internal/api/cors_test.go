@@ -91,7 +91,7 @@ func TestGinCORSMiddleware(t *testing.T) {
 				assert.Equal(t, http.StatusOK, w.Code)
 			}
 			assert.Equal(t, tt.expectedCORS, w.Header().Get("Access-Control-Allow-Origin"))
-			if tt.expectedCORS != "" {
+			if tt.requestOrigin != "" {
 				assert.Equal(t, "Origin", w.Header().Get("Vary"))
 			}
 		})
