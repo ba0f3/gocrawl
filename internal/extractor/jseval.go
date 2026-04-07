@@ -397,20 +397,34 @@ func extractNextFText(rawJSON string) []string {
 	if err := json.Unmarshal([]byte(rawJSON), &entries); err != nil {
 		return nil
 	}
-	var wire strings.Builder
+
+	// ⚡ Bolt Optimization: Pre-calculate total string length and call wire.Grow()
+	// to allocate memory exactly once, eliminating repeated heap allocations
+	// and dynamic array resizing when concatenating many Next.js JSON payloads.
+	var totalLen int
 	for _, e := range entries {
-		arr, ok := e.([]interface{})
-		if !ok || len(arr) < 2 {
-			continue
-		}
-		t, _ := arr[0].(float64)
-		if int(t) != 1 {
-			continue
-		}
-		if payload, ok := arr[1].(string); ok {
-			wire.WriteString(payload)
+		if arr, ok := e.([]interface{}); ok && len(arr) >= 2 {
+			if t, ok := arr[0].(float64); ok && int(t) == 1 {
+				if payload, ok := arr[1].(string); ok {
+					totalLen += len(payload)
+				}
+			}
 		}
 	}
+
+	var wire strings.Builder
+	wire.Grow(totalLen)
+
+	for _, e := range entries {
+		if arr, ok := e.([]interface{}); ok && len(arr) >= 2 {
+			if t, ok := arr[0].(float64); ok && int(t) == 1 {
+				if payload, ok := arr[1].(string); ok {
+					wire.WriteString(payload)
+				}
+			}
+		}
+	}
+
 	var texts []string
 	for _, line := range strings.Split(wire.String(), "\n") {
 		idx := strings.Index(line, "|")
