@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/PuerkitoBio/goquery"
 	isantibot "github.com/ba0f3/is-antibot-go"
+	"github.com/PuerkitoBio/goquery"
 )
 
 const chromedpHTMLScanMax = 256 * 1024

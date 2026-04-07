@@ -94,4 +94,4 @@ The previous method blindly appended to `strings.Builder` using `wire.WriteStrin
 In a benchmark processing 10,000 mock elements with large payloads, total allocations dropped from `29 allocs/op` down to exactly `1 alloc/op`. Execution time improved dramatically from `~5,173,894 ns/op` to `~694,086 ns/op` (approx 86% speedup).
 
 **Learning:**
-When building exceptionally large strings via `strings.Builder` dynamically in loops, always prefer pre-calculating the final total string length and calling `.Grow()` if you can cheaply predict it. The cost of a first pass loop to count lengths is vastly dwarfed by the cost of runtime heap slice reallocations.
+When building exceptionally large strings via `strings.Builder` dynamically in loops, always prefer pre-calculating the final total string length and calling `.Grow()` if you can cheaply predict it. The cost of a first-pass loop to count lengths is vastly dwarfed by the cost of runtime heap slice reallocations.
