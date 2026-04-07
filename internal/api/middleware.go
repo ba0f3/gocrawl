@@ -25,19 +25,34 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 }
 
 // CORSMiddleware adds CORS headers
-func CORSMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				allowed := false
+				for _, o := range allowedOrigins {
+					if o == "*" || o == origin {
+						allowed = true
+						break
+					}
+				}
+				if allowed {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+				}
+			}
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-		next.ServeHTTP(w, r)
-	})
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // AuthMiddleware validates API keys
@@ -128,12 +143,25 @@ func GinLoggingMiddleware() gin.HandlerFunc {
 }
 
 // GinCORSMiddleware adds CORS headers and handles OPTIONS.
-func GinCORSMiddleware() gin.HandlerFunc {
+func GinCORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		h := c.Writer.Header()
-		h.Set("Access-Control-Allow-Origin", "*")
-		h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			allowed := false
+			for _, o := range allowedOrigins {
+				if o == "*" || o == origin {
+					allowed = true
+					break
+				}
+			}
+			if allowed {
+				c.Header("Access-Control-Allow-Origin", origin)
+			}
+		}
+
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusOK)
 			return

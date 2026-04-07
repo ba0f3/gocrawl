@@ -50,8 +50,9 @@ type DatabaseConfig struct {
 }
 
 type SecurityConfig struct {
-	JWTSecret  string
-	EnableAuth bool
+	JWTSecret      string
+	EnableAuth     bool
+	AllowedOrigins []string
 }
 
 type CrawlerConfig struct {
@@ -229,6 +230,14 @@ func Load() (*Config, error) {
 	}
 	if cfg.LLM.Timeout == 0 {
 		cfg.LLM.Timeout = 120 * time.Second
+	}
+
+	if s := viper.GetString("ALLOWED_ORIGINS"); s != "" {
+		for _, o := range strings.Split(s, ",") {
+			if trimmed := strings.TrimSpace(o); trimmed != "" {
+				cfg.Security.AllowedOrigins = append(cfg.Security.AllowedOrigins, trimmed)
+			}
+		}
 	}
 
 	return cfg, nil
