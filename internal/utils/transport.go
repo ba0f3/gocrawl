@@ -16,7 +16,7 @@ func SafeTransport() http.RoundTripper {
 	}
 
 	return &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy:                 nil, // disable proxying from env to avoid SSRF bypass
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
@@ -61,7 +61,7 @@ func SafeTransport() http.RoundTripper {
 // isPrivateIP checks if an IP belongs to private or loopback ranges
 func isPrivateIP(ip net.IP) bool {
 	if ip == nil {
-		return false
+		return true // treat nil as unsafe/private
 	}
 	// Check standard private blocks and loopback
 	if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
@@ -71,33 +71,13 @@ func isPrivateIP(ip net.IP) bool {
 	// Additional manual checks
 	ip4 := ip.To4()
 	if ip4 != nil {
-		// 10.0.0.0/8
-		if ip4[0] == 10 {
-			return true
-		}
-		// 172.16.0.0/12
-		if ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31 {
-			return true
-		}
-		// 192.168.0.0/16
-		if ip4[0] == 192 && ip4[1] == 168 {
-			return true
-		}
-		// 169.254.0.0/16 (Link-local)
-		if ip4[0] == 169 && ip4[1] == 254 {
-			return true
-		}
-		// 127.0.0.0/8 (Loopback)
-		if ip4[0] == 127 {
-			return true
-		}
 		// 0.0.0.0/8 (Current network)
 		if ip4[0] == 0 {
 			return true
 		}
 	} else {
 		// IPv6 specific checks
-		// Unique Local Addresses (ULA) fd00::/8
+		// Unique Local Addresses (ULA) fc00::/7
 		if ip[0]&0xfe == 0xfc {
 			return true
 		}

@@ -17,8 +17,8 @@ func TestTransportForCrawler_ChromeTLS(t *testing.T) {
 
 func TestTransportForCrawler_DefaultNil(t *testing.T) {
 	cfg := &config.Config{Crawler: config.CrawlerConfig{CrawlMaxRetries: 0, EnableChromeTLS: false}}
-	if TransportForCrawler(cfg) != nil {
-		t.Fatal("expected nil transport when no chrome TLS and no retries")
+	if TransportForCrawler(cfg) == nil {
+		t.Fatal("expected SafeTransport when no chrome TLS and no retries")
 	}
 }
 
