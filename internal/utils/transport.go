@@ -48,7 +48,7 @@ func SafeTransport() http.RoundTripper {
 				return nil, fmt.Errorf("%w for %s", ErrBlockedConnection, host)
 			}
 
-			// Dial the first safe IP
+			// Try dialing each safe IP until one succeeds
 			var lastErr error
 			for _, ip := range safeIPs {
 				safeAddr := net.JoinHostPort(ip.String(), port)
@@ -79,12 +79,6 @@ func isPrivateIP(ip net.IP) bool {
 	if ip4 != nil {
 		// 0.0.0.0/8 (Current network)
 		if ip4[0] == 0 {
-			return true
-		}
-	} else {
-		// IPv6 specific checks
-		// Unique Local Addresses (ULA) fc00::/7
-		if ip[0]&0xfe == 0xfc {
 			return true
 		}
 	}
