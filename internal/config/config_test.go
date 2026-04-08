@@ -11,7 +11,7 @@ import (
 func TestLoadAllowedOrigins(t *testing.T) {
 	viper.Reset()
 	viper.Set("ALLOWED_ORIGINS", "http://example.com, http://test.com")
-	defer os.Unsetenv("ALLOWED_ORIGINS")
+	defer viper.Reset()
 
 	cfg, err := Load()
 	assert.NoError(t, err)
