@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -62,6 +63,9 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	for attempt := 0; attempt <= rt.max; attempt++ {
 		resp, err := rt.base.RoundTrip(req)
 		if err != nil {
+			if errors.Is(err, utils.ErrBlockedConnection) {
+				return nil, err
+			}
 			lastErr = err
 			if attempt == rt.max {
 				return nil, err

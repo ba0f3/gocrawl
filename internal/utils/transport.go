@@ -2,11 +2,15 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"time"
 )
+
+// ErrBlockedConnection is returned when SafeTransport prevents a connection to an internal IP.
+var ErrBlockedConnection = errors.New("SSRF protection: blocked connection to private IP")
 
 // SafeTransport returns an http.RoundTripper that blocks connections to internal IPs (SSRF protection).
 func SafeTransport() http.RoundTripper {
@@ -41,7 +45,7 @@ func SafeTransport() http.RoundTripper {
 			}
 
 			if len(safeIPs) == 0 {
-				return nil, fmt.Errorf("SSRF protection: blocked connection to private IP for %s", host)
+				return nil, fmt.Errorf("%w for %s", ErrBlockedConnection, host)
 			}
 
 			// Dial the first safe IP
