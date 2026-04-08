@@ -32,7 +32,11 @@ func SafeTransport() http.RoundTripper {
 				return nil, err
 			}
 
-			ips, err := dialer.Resolver.LookupIP(ctx, "ip", host)
+			r := dialer.Resolver
+			if r == nil {
+				r = net.DefaultResolver
+			}
+			ips, err := r.LookupIP(ctx, "ip", host)
 			if err != nil {
 				return nil, err
 			}
