@@ -14,6 +14,7 @@ import (
 	"gocrawl/internal/config"
 	"gocrawl/internal/extractor"
 	"gocrawl/internal/llm"
+	"gocrawl/internal/utils"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly/v2"
@@ -323,6 +324,8 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 	c := colly.NewCollector(
 		colly.Debugger(&debug.LogDebugger{}),
 	)
+
+	c.WithTransport(utils.SafeTransport())
 
 	c.SetRequestTimeout(timeout)
 

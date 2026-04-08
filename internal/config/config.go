@@ -232,6 +232,7 @@ func Load() (*Config, error) {
 		cfg.LLM.Timeout = 120 * time.Second
 	}
 
+	cfg.Security.AllowedOrigins = nil // ensure it is empty first
 	if s := viper.GetString("ALLOWED_ORIGINS"); s != "" {
 		for _, o := range strings.Split(s, ",") {
 			if trimmed := strings.TrimSpace(o); trimmed != "" {
