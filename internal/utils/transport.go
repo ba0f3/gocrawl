@@ -49,15 +49,17 @@ func SafeTransport() http.RoundTripper {
 			}
 
 			// Dial the first safe IP
+			var lastErr error
 			for _, ip := range safeIPs {
 				safeAddr := net.JoinHostPort(ip.String(), port)
 				conn, err := dialer.DialContext(ctx, network, safeAddr)
 				if err == nil {
 					return conn, nil
 				}
+				lastErr = err
 			}
 
-			return nil, fmt.Errorf("failed to dial any safe IPs for %s", host)
+			return nil, fmt.Errorf("failed to dial any safe IPs for %s: %w", host, lastErr)
 		},
 	}
 }
