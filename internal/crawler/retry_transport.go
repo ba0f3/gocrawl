@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gocrawl/internal/config"
+	"gocrawl/internal/utils"
 )
 
 // TransportForCrawler returns the HTTP transport for Colly: Chrome-like TLS (uTLS) when enabled,
@@ -26,6 +27,7 @@ func TransportForCrawler(cfg *config.Config) http.RoundTripper {
 			base = http.DefaultTransport
 		}
 	}
+	base = utils.SafeTransport(base)
 	if cfg.Crawler.CrawlMaxRetries > 0 {
 		return &retryTransport{
 			base: base,

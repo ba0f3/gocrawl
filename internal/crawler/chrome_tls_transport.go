@@ -8,6 +8,8 @@ import (
 
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
+
+	"gocrawl/internal/utils"
 )
 
 // newChromeHTTPTransport returns an *http.Transport that uses uTLS with a Chrome ClientHello
@@ -21,7 +23,10 @@ func newChromeHTTPTransport() *http.Transport {
 	t := base.Clone()
 
 	t.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		d := net.Dialer{Timeout: 30 * time.Second}
+		d := net.Dialer{
+			Timeout: 30 * time.Second,
+			Control: utils.SafeControl,
+		}
 		rawConn, err := d.DialContext(ctx, network, addr)
 		if err != nil {
 			return nil, err
