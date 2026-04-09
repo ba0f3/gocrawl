@@ -1,30 +1,34 @@
 package crawler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"gocrawl/internal/config"
+	"gocrawl/internal/utils"
 )
 
 // TransportForCrawler returns the HTTP transport for Colly: Chrome-like TLS (uTLS) when enabled,
 // otherwise a clone of the default transport, optionally wrapped with retry logic.
-// Returns nil when neither Chrome TLS nor retries apply (Colly uses library defaults).
+// Returns SafeTransport wrapped with retry if needed.
 func TransportForCrawler(cfg *config.Config) http.RoundTripper {
 	if cfg == nil {
-		return nil
+		return utils.SafeTransport()
 	}
 	var base http.RoundTripper
 	if cfg.Crawler.EnableChromeTLS {
-		base = newChromeHTTPTransport()
-	} else {
-		if t, ok := http.DefaultTransport.(*http.Transport); ok {
-			base = t.Clone()
-		} else {
-			base = http.DefaultTransport
+		// newChromeHTTPTransport needs to inherit SafeTransport's DialContext
+		t := newChromeHTTPTransport()
+		if safe, ok := utils.SafeTransport().(*http.Transport); ok {
+			t.DialContext = safe.DialContext
+			t.Proxy = safe.Proxy
 		}
+		base = t
+	} else {
+		base = utils.SafeTransport()
 	}
 	if cfg.Crawler.CrawlMaxRetries > 0 {
 		return &retryTransport{
@@ -39,10 +43,7 @@ func TransportForCrawler(cfg *config.Config) http.RoundTripper {
 			}(),
 		}
 	}
-	if cfg.Crawler.EnableChromeTLS {
-		return base
-	}
-	return nil
+	return base
 }
 
 // NewRetryTransport returns TransportForCrawler for backward compatibility.
@@ -62,6 +63,9 @@ func (rt *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	for attempt := 0; attempt <= rt.max; attempt++ {
 		resp, err := rt.base.RoundTrip(req)
 		if err != nil {
+			if errors.Is(err, utils.ErrBlockedConnection) {
+				return nil, err
+			}
 			lastErr = err
 			if attempt == rt.max {
 				return nil, err
