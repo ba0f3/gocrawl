@@ -332,27 +332,17 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 		c.UserAgent = "GoCrawl/1.0"
 	}
 
-	if t := TransportForCrawler(cfg); t != nil {
-		c.WithTransport(t)
-	}
-
 	if cfg != nil && cfg.Crawler.EnableProxyRotation && len(cfg.Crawler.Proxies) > 0 {
 		rps, err := proxy.RoundRobinProxySwitcher(cfg.Crawler.Proxies...)
 		if err != nil {
 			return nil, err
 		}
-
-		// Wrap proxy to ensure it resolves and passes SSRF check
-		c.SetProxyFunc(func(req *http.Request) (*url.URL, error) {
-			p, err := rps(req)
-			if err != nil {
-				return nil, err
-			}
-			if p != nil {
-				// The safe dialer will still check the proxy IP during DialContext.
-			}
-			return p, nil
-		})
+		c.SetProxyFunc(rps)
+	}
+	if cfg != nil {
+		if t := TransportForCrawler(cfg); t != nil {
+			c.WithTransport(t)
+		}
 	}
 
 	result := &ScrapeResult{

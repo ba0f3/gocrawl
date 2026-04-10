@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -233,16 +232,8 @@ func Load() (*Config, error) {
 		cfg.LLM.Timeout = 120 * time.Second
 	}
 
-	if viper.IsSet("ALLOWED_ORIGINS") {
-		if s := viper.GetString("ALLOWED_ORIGINS"); s != "" {
-			for _, o := range strings.Split(s, ",") {
-				if trimmed := strings.TrimSpace(o); trimmed != "" {
-					cfg.Security.AllowedOrigins = append(cfg.Security.AllowedOrigins, trimmed)
-				}
-			}
-		}
-	} else if osEnv := os.Getenv("ALLOWED_ORIGINS"); osEnv != "" {
-		for _, o := range strings.Split(osEnv, ",") {
+	if s := viper.GetString("ALLOWED_ORIGINS"); s != "" {
+		for _, o := range strings.Split(s, ",") {
 			if trimmed := strings.TrimSpace(o); trimmed != "" {
 				cfg.Security.AllowedOrigins = append(cfg.Security.AllowedOrigins, trimmed)
 			}

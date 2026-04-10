@@ -109,34 +109,3 @@ In micro-benchmarks analyzing class string evaluations with uppercase characters
 
 **Learning:**
 In deeply nested extraction or scoring loops, avoid using `strings.ToLower` combined with `strings.Contains` for simple pattern matching if the input strings regularly contain mixed case characters. Instead, use zero-allocation loops with manual case-insensitive byte conversion checks (`c += 'a' - 'A'`).
-
-## 2026-04-09 - O(1) Short-Circuiting URL Evaluation in MCP Crawler (`internal/mcp/server.go`)
-
-**What:**
-Swapped condition evaluation order in `performCrawl`'s `OnHTML` handler for `a[href]`. Instead of unconditionally extracting the absolute URL and calling `url.Parse(absURL)`, the code now locks the mutex and checks `visited[absURL]` first.
-
-**Why:**
-The previous method always parsed the absolute URL using `url.Parse` and evaluated its host *before* checking the simple O(1) `visited` boolean map. In a web crawler, most discovered links (headers, footers, navigation) are re-visited many times per page. Short-circuiting the boolean evaluation prevents the application from executing heavy `url.Parse` string validation logic for already-known links.
-
-**Measured Improvement:**
-A quick benchmark isolated to this specific code logic proved that already-visited links evaluate in `~17 ns/op` down from `~397 ns/op`, a ~23x improvement. This heavily optimizes the hot HTML extraction loop and lowers garbage collection pressure during deep MCP crawls.
-
-Environment for reproducibility:
-- OS: Ubuntu 24.04.4 LTS (Linux)
-- Go Version: go1.26.0 linux/amd64
-- CPU: Intel(R) Xeon(R) Processor @ 2.30GHz (4 cores)
-
-Raw benchmark command and output:
-```bash
-$ go test -bench . internal/mcp/server_benchmark_test.go
-goos: linux
-goarch: amd64
-cpu: Intel(R) Xeon(R) Processor @ 2.30GHz
-BenchmarkMCPScrapeURL_Old-4   	 3097119	       397.0 ns/op
-BenchmarkMCPScrapeURL_New-4   	62425632	        17.34 ns/op
-PASS
-ok  	command-line-arguments	2.743s
-```
-
-**Action:**
-Whenever iterating through `a[href]` tags inside Colly's `OnHTML` callbacks, always prioritize boolean map checks (`visited[absURL]`) over expensive URL parser state machines.
