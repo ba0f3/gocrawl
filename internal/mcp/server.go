@@ -235,6 +235,7 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		}
 
 		crawlMu.Lock()
+		// Double check visited in case another goroutine visited it while we were parsing
 		if !visited[absURL] && len(visited) < maxPages {
 			visited[absURL] = true
 			crawlMu.Unlock()
