@@ -121,5 +121,22 @@ The previous method always parsed the absolute URL using `url.Parse` and evaluat
 **Measured Improvement:**
 A quick benchmark isolated to this specific code logic proved that already-visited links evaluate in `~17 ns/op` down from `~397 ns/op`, a ~23x improvement. This heavily optimizes the hot HTML extraction loop and lowers garbage collection pressure during deep MCP crawls.
 
+Environment for reproducibility:
+- OS: Ubuntu 24.04.4 LTS (Linux)
+- Go Version: go1.26.0 linux/amd64
+- CPU: Intel(R) Xeon(R) Processor @ 2.30GHz (4 cores)
+
+Raw benchmark command and output:
+```bash
+$ go test -bench . internal/mcp/server_benchmark_test.go
+goos: linux
+goarch: amd64
+cpu: Intel(R) Xeon(R) Processor @ 2.30GHz
+BenchmarkMCPScrapeURL_Old-4   	 3097119	       397.0 ns/op
+BenchmarkMCPScrapeURL_New-4   	62425632	        17.34 ns/op
+PASS
+ok  	command-line-arguments	2.743s
+```
+
 **Action:**
 Whenever iterating through `a[href]` tags inside Colly's `OnHTML` callbacks, always prioritize boolean map checks (`visited[absURL]`) over expensive URL parser state machines.
