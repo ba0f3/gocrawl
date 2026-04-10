@@ -229,6 +229,8 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 
 	if t := crawler.TransportForCrawler(cm.cfg); t != nil {
 		c.WithTransport(t)
+	} else {
+		c.WithTransport(utils.SafeTransport())
 	}
 
 	if !req.AllowExternalLinks {

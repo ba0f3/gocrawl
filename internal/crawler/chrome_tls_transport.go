@@ -7,6 +7,7 @@ import (
 	"time"
 
 	utls "github.com/refraction-networking/utls"
+	"gocrawl/internal/utils"
 	"golang.org/x/net/http2"
 
 	"gocrawl/internal/utils"
@@ -21,6 +22,11 @@ func newChromeHTTPTransport() *http.Transport {
 		base = &http.Transport{}
 	}
 	t := base.Clone()
+
+	safeTransport, ok := utils.SafeTransport().(*http.Transport)
+	if ok && safeTransport.DialContext != nil {
+		t.DialContext = safeTransport.DialContext
+	}
 
 	t.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		d := net.Dialer{
