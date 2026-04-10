@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"syscall"
+	"time"
 )
 
 // SafeControl checks if the resolved IP address is a private, loopback, unspecified, or link-local address.
@@ -28,10 +30,16 @@ func SafeTransport(rt http.RoundTripper) http.RoundTripper {
 
 	if t, ok := rt.(*http.Transport); ok {
 		tc := t.Clone()
-		d := &net.Dialer{
-			Control: SafeControl,
+
+		tc.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			d := &net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				Control:   SafeControl,
+			}
+			return d.DialContext(ctx, network, addr)
 		}
-		tc.DialContext = d.DialContext
+
 		return tc
 	}
 
