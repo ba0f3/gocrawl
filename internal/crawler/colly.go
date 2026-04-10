@@ -14,6 +14,7 @@ import (
 	"gocrawl/internal/config"
 	"gocrawl/internal/extractor"
 	"gocrawl/internal/llm"
+	"gocrawl/internal/utils"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly/v2"
@@ -332,16 +333,30 @@ func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.C
 		c.UserAgent = "GoCrawl/1.0"
 	}
 
-	if cfg != nil && cfg.Crawler.EnableProxyRotation && len(cfg.Crawler.Proxies) > 0 {
-		rps, err := proxy.RoundRobinProxySwitcher(cfg.Crawler.Proxies...)
-		if err != nil {
-			return nil, err
-		}
-		c.SetProxyFunc(rps)
-	}
 	if cfg != nil {
-		if t := TransportForCrawler(cfg); t != nil {
+		t := TransportForCrawler(cfg)
+		if t != nil {
 			c.WithTransport(t)
+		} else {
+			// Ensure default transport is also wrapped with SafeTransport to prevent SSRF bypass
+			safeDefault := utils.SafeTransport(http.DefaultTransport)
+			if safeDefault != nil {
+				c.WithTransport(safeDefault)
+			}
+		}
+
+		if cfg.Crawler.EnableProxyRotation && len(cfg.Crawler.Proxies) > 0 {
+			rps, err := proxy.RoundRobinProxySwitcher(cfg.Crawler.Proxies...)
+			if err != nil {
+				return nil, err
+			}
+			c.SetProxyFunc(rps)
+		}
+	} else {
+		// Even without config, ensure SSRF protection
+		safeDefault := utils.SafeTransport(http.DefaultTransport)
+		if safeDefault != nil {
+			c.WithTransport(safeDefault)
 		}
 	}
 
