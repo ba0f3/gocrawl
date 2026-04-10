@@ -220,6 +220,7 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		link := e.Attr("href")
 		absURL := e.Request.AbsoluteURL(link)
 
+		// ⚡ Bolt Optimization: Pre-check visited map and page limits before parsing new URL
 		crawlMu.Lock()
 		if visited[absURL] || len(visited) >= maxPages {
 			crawlMu.Unlock()
@@ -227,17 +228,13 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		}
 		crawlMu.Unlock()
 
-		// ⚡ Bolt Optimization: Checking visited[absURL] before url.Parse enables O(1) short-circuiting.
-		// If the URL has already been visited (which happens constantly for nav/footer links),
-		// we skip the expensive url.Parse string allocation and validation logic.
 		parsedURL, err := url.Parse(absURL)
 		if err != nil || parsedURL.Host != baseURL.Host {
 			return
 		}
 
 		crawlMu.Lock()
-		// Double check visited in case another goroutine visited it while we were parsing
-		if !visited[absURL] && len(visited) < maxPages {
+		if !visited[absURL] {
 			visited[absURL] = true
 			crawlMu.Unlock()
 			_ = e.Request.Visit(absURL)
