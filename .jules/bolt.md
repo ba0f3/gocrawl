@@ -2,10 +2,10 @@
 
 ## Inefficient Substring Checks in URL Parsing (`internal/api/crawl_manager.go`)
 
-**What:**
+**Learning:**
 Pre-compiled regular expressions were introduced to replace the O(N*M) nested loops running `strings.Contains()` during the crawl cycle in `visitIfAllowed` and `shouldScrapeURL`.
 
-**Why:**
+
 The previous method iterated through `IncludePaths` and `ExcludePaths` using `strings.Contains(urlPath, path)` for *every single discovered URL*. For very large sites or long path configuration lists, this caused measurable CPU overhead per URL. A single compilation of these paths into a regex `(path1|path2|...)` effectively builds a quick evaluation tree, reducing repeated string parsing logic.
 
 **Measured Improvement:**
@@ -13,10 +13,10 @@ For large arrays (e.g., 50-100 items), regex avoids repeating O(N) evaluations. 
 
 ## 2026-04-01 - O(1) Short-Circuiting URL Evaluation (`internal/api/crawl_manager.go`)
 
-**What:**
+**Learning:**
 Swapped condition evaluation order in `visitIfAllowed` from `cm.shouldScrapeURL(...) && !visited[absURL]` to `!visited[absURL] && cm.shouldScrapeURL(...)`.
 
-**Why:**
+
 The previous method always parsed the absolute URL using `url.Parse` and executed matching logic against compiled regular expressions (`shouldScrapeURL`) *before* checking the simple O(1) `visited` boolean map. In a crawl job, most discovered links (headers, footers, navigation) are re-visited many times per page. Short-circuiting the boolean evaluation prevents the application from executing heavy URL logic for already-known links.
 
 **Measured Improvement:**
@@ -24,10 +24,10 @@ A quick benchmark isolated to this change proved that already-visited links eval
 
 ## 2026-04-02 - Hoist URL Parsing in Scraper Link Collection (`internal/crawler/colly.go`)
 
-**What:**
+**Learning:**
 Moved the base URL parsing logic `baseURL, _ := url.Parse(pageURL)` out of the `appendResolvedHref` utility function, and instead pass down the parsed `*url.URL` object from the calling scopes `buildResultFromMainHTMLWithDoc` and `collectScrapeLinks`.
 
-**Why:**
+
 The previous method instantiated a `url.Parse(pageURL)` on every single `<a>` tag found within a page payload. Since `url.Parse` involves string allocations, state machine validation, and struct construction, performing this inside an O(N) loop mapping over thousands of links causes substantial redundant CPU and memory overhead.
 
 **Measured Improvement:**
@@ -35,10 +35,10 @@ In a micro-benchmark using a mock `a` tag payload loop (1,000,000 iterations), e
 
 ## 2026-04-03 - Avoid `goquery.Selection.ParentsFiltered` in Hot Loops (`internal/api/crawl_manager.go`)
 
-**What:**
+**Learning:**
 Replaced the loop `for _, sel := range []string{"article", "main", ...} { if e.DOM.ParentsFiltered(sel).Length() > 0 ... }` with a pre-compiled `cascadia.MustCompile("article, main, ...")` and manual `x/net/html` parent traversal (`for p := n.Parent; p != nil; p = p.Parent`).
 
-**Why:**
+
 The previous method instantiated `goquery.Selection.ParentsFiltered` for multiple CSS string queries on *every single discovered link* on a scraped page. Because goquery strings are dynamically compiled into cascadia matchers and traverse up the entire parent tree on each call, repeating this inside an O(N) array caused immense redundant memory allocation and CPU overhead in the tight crawling extraction loop. Manually pre-compiling the CSS selector and traversing the parent nodes natively saves thousands of redundant DOM parsing cycles.
 
 **Measured Improvement:**
@@ -49,10 +49,10 @@ When iterating over DOM queries on every node matching a `OnHTML` rule or inner 
 
 ## 2026-04-04 - Zero-Allocation Token Scanning (`internal/extractor/noise.go`)
 
-**What:**
+**Learning:**
 Replaced `strings.Fields(class)` with a custom manual byte-scanning loop in the `isAdClass` function. Evaluated string tokens are now accessed via string slicing `class[start:i]` and checked against bounds-safe manual byte lookups instead of utilizing `strings.HasPrefix` or `strings.HasSuffix`.
 
-**Why:**
+
 The `isAdClass` function runs inside the `IsNoise` execution path, which is mapped over countless DOM elements during the web claw–style extraction scoring phase. Evaluating `strings.Fields(class)` allocates a new array slice on the heap for every tested element's class attribute. Using zero-allocation byte scanning eliminates GC overhead.
 
 **Measured Improvement:**
@@ -70,10 +70,10 @@ Do not attempt to optimize `buildExcludeSet` by removing `addSubtreeNodes` witho
 
 ## 2026-04-05 - Unified Zero-Allocation String Scanning in IsNoise (`internal/extractor/noise.go`)
 
-**What:**
+**Learning:**
 Replaced `strings.Fields(class)` and unified multiple class evaluation functions (`isAdClass` and `hasNoiseClassPattern`) into a single, zero-allocation token scanning loop over class attributes in `IsNoise`. Removed redundant `isAdClass` and `hasNoiseClassPattern` loops entirely.
 
-**Why:**
+
 The `IsNoise` function runs in a critical hot loop scoring extraction candidates for noise (nav, ads, sidebars, cookie banners). The prior code allocated a new string array slice (`strings.Fields`) and passed the class string to subsequent functions which ran secondary loops doing their own token matching or sub-string iterations. By combining all logical evaluations into a manual byte-scanning mechanism, memory allocations drop to zero and we eliminate duplicate traversals.
 
 **Measured Improvement:**
@@ -84,10 +84,10 @@ Never iterate character arrays multiple times in hot loops for string validation
 
 ## 2026-04-06 - Pre-calculate Strings.Builder Capacity (`internal/extractor/jseval.go`)
 
-**What:**
+**Learning:**
 Added a pre-calculation loop to determine the exact total byte length of string payloads in `extractNextFText`, followed by calling `wire.Grow(totalLen)` before starting the actual string concatenation loop.
 
-**Why:**
+
 The previous method blindly appended to `strings.Builder` using `wire.WriteString(payload)`. When extracting massive chunks of text data (especially from rich JSON dumps inside Next.js `__next_f` blobs), the internal byte slice inside `strings.Builder` dynamically resizes to accommodate new data, forcing repeated heap allocations and data copying. By iterating once to calculate the target length, `strings.Builder` allocates the perfect amount of memory upfront, reducing memory operations and GC overhead.
 
 **Measured Improvement:**
@@ -98,10 +98,10 @@ When building exceptionally large strings via `strings.Builder` dynamically in l
 
 ## 2026-04-07 - Zero-Allocation Case-Insensitive Pattern Matching (`internal/extractor/score.go`)
 
-**What:**
+**Learning:**
 Replaced `strings.ToLower(class)` and `strings.Contains(cl, "pattern")` with a custom `hasScorePattern` function that scans class and ID attributes with zero heap allocations.
 
-**Why:**
+
 The previous code in the hot DOM-scoring loop (`scoreNode`) called `strings.ToLower` on every `class` and `id` string for thousands of scored elements per page. If the input string had even a single uppercase character, `strings.ToLower` allocated a completely new string byte array on the heap, creating immense GC pressure and CPU overhead during long crawls.
 
 **Measured Improvement:**
@@ -109,3 +109,12 @@ In micro-benchmarks analyzing class string evaluations with uppercase characters
 
 **Learning:**
 In deeply nested extraction or scoring loops, avoid using `strings.ToLower` combined with `strings.Contains` for simple pattern matching if the input strings regularly contain mixed case characters. Instead, use zero-allocation loops with manual case-insensitive byte conversion checks (`c += 'a' - 'A'`).
+
+## 2026-04-08 - O(1) Short-Circuiting URL Evaluation in MCP Crawler (`internal/mcp/server.go`)
+
+**Learning:**
+Moved the `url.Parse` inside the MCP server's crawl link evaluation logic to execute *after* checking the boolean `visited` map. We lock `crawlMu`, evaluate if the link is known, and unlock early, only performing the `url.Parse` for strictly new links.
+Similar to a previous optimization in the crawl manager (`internal/api/crawl_manager.go`), `url.Parse` performs multiple memory allocations and state machine parsing operations. Because standard web pages have identical header and footer navigation on every page, a full site crawl will attempt to process the exact same URLs thousands of times. Validating against the O(1) visited map short-circuits this massive repeated overhead.
+
+**Action:**
+Whenever extracting and verifying absolute URLs dynamically within the `OnHTML` hot loop, always check if the string signature already exists in a lookup map *before* attempting to parse or validate the string mathematically.

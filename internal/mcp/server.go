@@ -220,6 +220,15 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		link := e.Attr("href")
 		absURL := e.Request.AbsoluteURL(link)
 
+		// ⚡ Bolt Optimization: Check visited map before expensive URL parsing
+		crawlMu.Lock()
+		isVisited := visited[absURL]
+		if isVisited {
+			crawlMu.Unlock()
+			return
+		}
+		crawlMu.Unlock()
+
 		parsedURL, err := url.Parse(absURL)
 		if err != nil || parsedURL.Host != baseURL.Host {
 			return
