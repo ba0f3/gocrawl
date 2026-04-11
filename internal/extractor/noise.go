@@ -116,8 +116,13 @@ func IsNoiseDescendant(sel *goquery.Selection) bool {
 	if sel == nil || sel.Length() == 0 {
 		return false
 	}
-	for p := sel.Parent(); p.Length() > 0; p = p.Parent() {
-		if IsNoise(p) {
+	// ⚡ Bolt Optimization: Manually traverse x/net/html nodes
+	// instead of allocating new goquery.Selection objects in a loop.
+	selWrapper := &goquery.Selection{Nodes: make([]*html.Node, 1)}
+	for p := sel.Get(0).Parent; p != nil; p = p.Parent {
+		// Update reusable wrapper element instead of creating new structs
+		selWrapper.Nodes[0] = p
+		if IsNoise(selWrapper) {
 			return true
 		}
 	}

@@ -118,3 +118,6 @@ Similar to a previous optimization in the crawl manager (`internal/api/crawl_man
 
 **Action:**
 Whenever extracting and verifying absolute URLs dynamically within the `OnHTML` hot loop, always check if the string signature already exists in a lookup map *before* attempting to parse or validate the string mathematically.
+## 2026-04-11 - Avoid goquery.Selection allocations in hot DOM traversals
+**Learning:** In hot scraping and DOM-scoring loops, repeatedly traversing the DOM using `goquery` methods like `sel.Parent()` creates significant CPU and memory allocation overhead because it creates new structs and slices on every step.
+**Action:** Bypassing `goquery` and manually traversing the underlying `x/net/html` node tree (e.g., `for p := sel.Get(0).Parent; p != nil; p = p.Parent`) eliminates these allocations. Use a transient struct `&goquery.Selection{Nodes: []*html.Node{p}}` if an API demands a `*goquery.Selection`.
