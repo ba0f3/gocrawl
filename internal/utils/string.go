@@ -3,6 +3,13 @@ package utils
 // ⚡ Bolt Optimization: Zero-allocation case-insensitive substring matcher.
 // Note: This optimization requires all strings in the 'patterns' slice to be pre-lowercased.
 func HasAnyLowercasePattern(s string, patterns []string) bool {
+	// First handle the empty pattern case that should return true regardless of s
+	for _, p := range patterns {
+		if len(p) == 0 {
+			return true
+		}
+	}
+
 	sLen := len(s)
 	if sLen == 0 {
 		return false
@@ -10,9 +17,7 @@ func HasAnyLowercasePattern(s string, patterns []string) bool {
 
 	for _, p := range patterns {
 		pLen := len(p)
-		if pLen == 0 {
-			return true
-		}
+		// Empty patterns already handled above
 		if pLen > sLen {
 			continue
 		}
