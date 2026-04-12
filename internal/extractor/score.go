@@ -4,6 +4,8 @@ import (
 	"math"
 	"strings"
 
+	"gocrawl/internal/utils"
+
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
 )
@@ -12,37 +14,6 @@ var candidateSelector = "article, main, [role='main'], div, section, td"
 
 var classScorePatterns = []string{"content", "article", "post", "entry"}
 var idScorePatterns = []string{"content", "article", "post", "main"}
-
-// ⚡ Bolt Optimization: Zero-allocation case-insensitive substring matcher.
-func hasScorePattern(s string, patterns []string) bool {
-	sLen := len(s)
-	if sLen == 0 {
-		return false
-	}
-	for _, p := range patterns {
-		pLen := len(p)
-		if pLen > sLen {
-			continue
-		}
-		for i := 0; i <= sLen-pLen; i++ {
-			match := true
-			for j := 0; j < pLen; j++ {
-				c := s[i+j]
-				if c >= 'A' && c <= 'Z' {
-					c += 'a' - 'A'
-				}
-				if c != p[j] {
-					match = false
-					break
-				}
-			}
-			if match {
-				return true
-			}
-		}
-	}
-	return false
-}
 
 func findBestCandidate(doc *goquery.Document, exclude map[*html.Node]struct{}) *goquery.Selection {
 	var best *goquery.Selection
@@ -105,12 +76,12 @@ func scoreNode(sel *goquery.Selection) float64 {
 	}
 	if class, ok := sel.Attr("class"); ok {
 		// ⚡ Bolt Optimization: Use zero-allocation matching
-		if hasScorePattern(class, classScorePatterns) {
+		if utils.HasAnyLowercasePattern(class, classScorePatterns) {
 			score += 25
 		}
 	}
 	if id, ok := sel.Attr("id"); ok {
-		if hasScorePattern(id, idScorePatterns) {
+		if utils.HasAnyLowercasePattern(id, idScorePatterns) {
 			score += 25
 		}
 	}

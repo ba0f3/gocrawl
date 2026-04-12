@@ -153,7 +153,7 @@ func TestHasUICSRFrameworkMarker(t *testing.T) {
 		{`<html><body><p>Static article about React</p></body></html>`, false},
 	}
 	for _, tc := range cases {
-		got := hasUICSRFrameworkMarker(strings.ToLower(tc.snippet))
+		got := hasUICSRFrameworkMarker(tc.snippet)
 		if got != tc.want {
 			t.Fatalf("%q: got %v want %v", tc.snippet, got, tc.want)
 		}
