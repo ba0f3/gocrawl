@@ -3,6 +3,8 @@ package crawler
 import (
 	"net/url"
 	"testing"
+
+	"gocrawl/internal/utils"
 )
 
 func BenchmarkAppendResolvedHref_Old(b *testing.B) {
@@ -50,8 +52,7 @@ func BenchmarkAppendResolvedHref_Bolt(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// simulate what utils.ResolveHref does for root relative
-		abs := baseURL.Scheme + "://" + baseURL.Host + href
+		abs := utils.ResolveHref(baseURL, href)
 		if _, ok := seen[abs]; ok {
 			continue
 		}

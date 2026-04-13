@@ -22,6 +22,8 @@ func TestResolveHref(t *testing.T) {
 		{"?query=1", "https://example.com/some/path/page.html?query=1"},
 		{"#frag", "https://example.com/some/path/page.html#frag"},
 		{"//schemeless.com/path", "https://schemeless.com/path"},
+		{"http://:bad", ""}, // malformed absolute URL should fail parse and return empty
+		{"/some/%xx", ""},   // malformed root relative URL
 	}
 
 	for _, tt := range tests {
@@ -31,6 +33,22 @@ func TestResolveHref(t *testing.T) {
 				t.Errorf("ResolveHref(%q) = %v, want %v", tt.href, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestResolveHref_NilBase(t *testing.T) {
+	got := ResolveHref(nil, "/some/path")
+	if got != "" {
+		t.Errorf("ResolveHref(nil, ...) = %v, want empty string", got)
+	}
+}
+
+func TestResolveHref_EmptyBaseHost(t *testing.T) {
+	baseURL, _ := url.Parse("/just/a/path")
+	got := ResolveHref(baseURL, "/some/path")
+	expected := "/some/path"
+	if got != expected {
+		t.Errorf("ResolveHref with empty base host = %v, want %v", got, expected)
 	}
 }
 

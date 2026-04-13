@@ -131,7 +131,7 @@ Created a custom `utils.ResolveHref` utility to bypass `url.Parse` and `baseURL.
 The `appendResolvedHref` function runs on every discovered link during an HTML crawl (`a[href]`). Using `url.Parse` inside this hot loop creates a heavy overhead as it instantiates a full `url.URL` struct and parses query/fragment states. For absolute or simple root-relative paths—which constitute the vast majority of web links—parsing the URL mathematically is unnecessary and causes enormous garbage collection and CPU overhead.
 
 **Measured Improvement:**
-In micro-benchmarks analyzing the common root-relative URL (`/some/path`), execution time dropped from `~751-954 ns/op` to `~76-82 ns/op` (~90% speedup) when comparing standard `url.Parse` to the zero-allocation string prefix checking method. Absolute URLs take only `~4 ns/op` because they can be immediately returned.
+In micro-benchmarks analyzing the common root-relative URL (`/some/path`), execution time dropped from `~751-954 ns/op` to `~76-82 ns/op` (~90% speedup) when comparing standard `url.Parse` to the low-allocation string prefix checking method. Absolute URLs take only `~4 ns/op` because they can be immediately returned (negligible cost), while root-relative URLs still allocate the resulting concatenated output string.
 
 **Learning:**
-When constructing or verifying massive amounts of absolute URLs dynamically inside DOM hot loops (such as Colly `OnHTML` handlers), implement zero-allocation string prefix checking fast-paths (`strings.HasPrefix`) before resorting to the highly intensive `url.Parse` state machine.
+When constructing or verifying massive amounts of absolute URLs dynamically inside DOM hot loops (such as Colly `OnHTML` handlers), implement low-allocation string prefix checking fast-paths (`strings.HasPrefix`) to avoid `url.Parse` allocations before resorting to the highly intensive `url.Parse` state machine.
