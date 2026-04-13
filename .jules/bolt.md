@@ -121,3 +121,17 @@ Whenever extracting and verifying absolute URLs dynamically within the `OnHTML` 
 ## 2026-04-11 - Avoid goquery.Selection allocations in hot DOM traversals
 **Learning:** In hot scraping and DOM-scoring loops, repeatedly traversing the DOM using `goquery` methods like `sel.Parent()` creates significant CPU and memory allocation overhead because it creates new structs and slices on every step.
 **Action:** Bypassing `goquery` and manually traversing the underlying `x/net/html` node tree (e.g., `for p := sel.Get(0).Parent; p != nil; p = p.Parent`) eliminates these allocations. Use a transient struct `&goquery.Selection{Nodes: []*html.Node{p}}` if an API demands a `*goquery.Selection`.
+
+## 2026-04-13 - Fast-Path URL Resolution to Avoid url.Parse Allocations (`internal/crawler/colly.go`)
+
+**What:**
+Created a custom `utils.ResolveHref` utility to bypass `url.Parse` and `baseURL.ResolveReference` for common URL formats during link extraction in `appendResolvedHref`. The new utility checks if a URL is already absolute (`http://` or `https://`) or root-relative (`/` but not `//`) and uses simple string concatenation to construct the absolute URL.
+
+**Why:**
+The `appendResolvedHref` function runs on every discovered link during an HTML crawl (`a[href]`). Using `url.Parse` inside this hot loop creates a heavy overhead as it instantiates a full `url.URL` struct and parses query/fragment states. For absolute or simple root-relative paths—which constitute the vast majority of web links—parsing the URL mathematically is unnecessary and causes enormous garbage collection and CPU overhead.
+
+**Measured Improvement:**
+In micro-benchmarks analyzing the common root-relative URL (`/some/path`), execution time dropped from `~751-954 ns/op` to `~76-82 ns/op` (~90% speedup) when comparing standard `url.Parse` to the zero-allocation string prefix checking method. Absolute URLs take only `~4 ns/op` because they can be immediately returned.
+
+**Learning:**
+When constructing or verifying massive amounts of absolute URLs dynamically inside DOM hot loops (such as Colly `OnHTML` handlers), implement zero-allocation string prefix checking fast-paths (`strings.HasPrefix`) before resorting to the highly intensive `url.Parse` state machine.

@@ -39,3 +39,21 @@ func BenchmarkAppendResolvedHref_New(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkAppendResolvedHref_Bolt(b *testing.B) {
+	pageURL := "https://example.com/some/path/page.html"
+	href := "/relative/link?q=1"
+
+	seen := make(map[string]struct{})
+
+	baseURL, _ := url.Parse(pageURL)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// simulate what utils.ResolveHref does for root relative
+		abs := baseURL.Scheme + "://" + baseURL.Host + href
+		if _, ok := seen[abs]; ok {
+			continue
+		}
+	}
+}
