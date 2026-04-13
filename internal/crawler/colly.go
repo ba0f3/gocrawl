@@ -14,6 +14,7 @@ import (
 	"gocrawl/internal/config"
 	"gocrawl/internal/extractor"
 	"gocrawl/internal/llm"
+	"gocrawl/internal/utils"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly/v2"
@@ -246,11 +247,14 @@ func appendResolvedHref(s *goquery.Selection, baseURL *url.URL, links *[]string,
 	if href == "" || baseURL == nil {
 		return
 	}
-	linkURL, err := url.Parse(href)
-	if err != nil {
+
+	// ⚡ Bolt Optimization: Use zero-allocation fast-path resolution
+	// for absolute and root-relative URLs.
+	abs := utils.ResolveHref(baseURL, href)
+	if abs == "" {
 		return
 	}
-	abs := baseURL.ResolveReference(linkURL).String()
+
 	if _, ok := seen[abs]; ok {
 		return
 	}
