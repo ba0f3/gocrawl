@@ -6,9 +6,10 @@ import (
 )
 
 // ResolveHref performs an optimized, low-allocation fast-path resolution
-// for common absolute and root-relative URLs. It avoids url.Parse allocations
-// for absolute URLs (which have negligible cost) and avoids ResolveReference
-// overhead for root-relative URLs (where concatenation still allocates the output string).
+// for common absolute and root-relative URLs. Absolute URLs are still validated
+// with url.Parse, but are immediately returned on success to bypass further processing.
+// Root-relative URLs avoid ResolveReference overhead by using simple string concatenation
+// (which still allocates the output string).
 func ResolveHref(baseURL *url.URL, href string) string {
 	if href == "" || baseURL == nil {
 		return ""
@@ -23,7 +24,11 @@ func ResolveHref(baseURL *url.URL, href string) string {
 		// Fast path: root-relative URL (starts with /, but not //)
 		if baseURL.Scheme != "" && baseURL.Host != "" {
 			if _, err := url.Parse(href); err == nil {
-				return baseURL.Scheme + "://" + baseURL.Host + href
+				userinfo := ""
+				if baseURL.User != nil {
+					userinfo = baseURL.User.String() + "@"
+				}
+				return baseURL.Scheme + "://" + userinfo + baseURL.Host + href
 			}
 		}
 	}

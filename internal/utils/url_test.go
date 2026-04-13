@@ -52,12 +52,23 @@ func TestResolveHref_EmptyBaseHost(t *testing.T) {
 	}
 }
 
+func TestResolveHref_UserAuthBase(t *testing.T) {
+	baseURL, _ := url.Parse("https://user:pass@example.com/some/path")
+	got := ResolveHref(baseURL, "/root/path")
+	expected := "https://user:pass@example.com/root/path"
+	if got != expected {
+		t.Errorf("ResolveHref with auth base = %v, want %v", got, expected)
+	}
+}
+
+var benchStr string
+
 func BenchmarkResolveHref_Absolute(b *testing.B) {
 	baseURL, _ := url.Parse("https://example.com/some/path/page.html")
 	href := "https://other.com/link"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ResolveHref(baseURL, href)
+		benchStr = ResolveHref(baseURL, href)
 	}
 }
 
@@ -66,7 +77,7 @@ func BenchmarkResolveHref_RootRelative(b *testing.B) {
 	href := "/root/path"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ResolveHref(baseURL, href)
+		benchStr = ResolveHref(baseURL, href)
 	}
 }
 
@@ -75,6 +86,6 @@ func BenchmarkResolveHref_Relative(b *testing.B) {
 	href := "relative/link"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ResolveHref(baseURL, href)
+		benchStr = ResolveHref(baseURL, href)
 	}
 }
