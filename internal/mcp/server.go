@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -210,6 +211,9 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 	var crawlMu sync.Mutex
 	visited := make(map[string]bool)
 
+	// ⚡ Bolt Optimization: Hoist expected origin calculation out of the OnHTML hot loop
+	expectedOrigin := baseURL.Scheme + "://" + baseURL.Host
+
 	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
 		select {
 		case <-ctx.Done():
@@ -228,9 +232,22 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		}
 		crawlMu.Unlock()
 
-		parsedURL, err := url.Parse(absURL)
-		if err != nil || parsedURL.Host != baseURL.Host {
-			return
+		// ⚡ Bolt Optimization: Safe low-allocation fast-path for domain validation.
+		// Avoids instantiating `url.URL` structs for the thousands of links found on pages.
+		isAllowedOrigin := false
+		if strings.HasPrefix(absURL, expectedOrigin) {
+			// Ensure we are not matching a sub-string of a different domain (e.g., example.com.org)
+			if len(absURL) == len(expectedOrigin) || absURL[len(expectedOrigin)] == '/' || absURL[len(expectedOrigin)] == '?' || absURL[len(expectedOrigin)] == '#' {
+				isAllowedOrigin = true
+			}
+		}
+
+		if !isAllowedOrigin {
+			// Fallback for complex URLs (auth, unusual formatting)
+			parsedURL, err := url.Parse(absURL)
+			if err != nil || parsedURL.Host != baseURL.Host {
+				return
+			}
 		}
 
 		crawlMu.Lock()
