@@ -30,11 +30,23 @@ func addSubtreeNodes(ex map[*html.Node]struct{}, root *goquery.Selection) {
 	if root == nil || root.Length() == 0 {
 		return
 	}
-	root.Union(root.Find("*")).Each(func(_ int, s *goquery.Selection) {
-		if n := s.Get(0); n != nil {
-			ex[n] = struct{}{}
-		}
-	})
+	// ⚡ Bolt Optimization: Use manual x/net/html tree traversal
+	// to bypass massive slice/struct allocations from root.Find("*") and root.Union().
+	for _, n := range root.Nodes {
+		traverseAndAddExcluded(ex, n)
+	}
+}
+
+func traverseAndAddExcluded(ex map[*html.Node]struct{}, n *html.Node) {
+	if n == nil {
+		return
+	}
+	if n.Type == html.ElementNode {
+		ex[n] = struct{}{}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		traverseAndAddExcluded(ex, c)
+	}
 }
 
 func isExcluded(n *html.Node, ex map[*html.Node]struct{}) bool {
