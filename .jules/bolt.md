@@ -163,3 +163,6 @@ Micro-benchmarks parsing standard URLs validate that checking `strings.HasPrefix
 
 **Learning:**
 Ad-hoc string splitting or splitting on `/` to manually implement `url.Parse` is dangerous (vulnerable to `evil.com?@example.com` SSRF escapes) and error-prone. Instead, leverage simple deterministic prefix checks (hoisted string concatenation) against `baseURL.Scheme + "://" + baseURL.Host` for safe O(1) matching. Only fall back to `url.Parse` if the fast-path fails.
+## 2026-04-15 - Zero-allocation net/html tree traversal for goquery subtrees
+**Learning:** In GoQuery, chaining methods like `root.Union(root.Find("*"))` on large DOM subtrees causes massive hidden slice/struct allocations and iteration overhead per node.
+**Action:** Manually traverse the underlying `x/net/html` tree recursively (using `FirstChild` and `NextSibling`) to eliminate temporary struct/slice allocations when collecting nodes.
