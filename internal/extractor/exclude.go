@@ -41,11 +41,18 @@ func traverseAndAddExcluded(ex map[*html.Node]struct{}, n *html.Node) {
 	if n == nil {
 		return
 	}
-	if n.Type == html.ElementNode {
-		ex[n] = struct{}{}
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		traverseAndAddExcluded(ex, c)
+	stack := []*html.Node{n}
+	for len(stack) > 0 {
+		curr := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if curr.Type == html.ElementNode {
+			ex[curr] = struct{}{}
+		}
+
+		for c := curr.FirstChild; c != nil; c = c.NextSibling {
+			stack = append(stack, c)
+		}
 	}
 }
 
