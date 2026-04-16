@@ -1,11 +1,11 @@
 package utils
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"syscall"
 	"time"
 )
 
@@ -17,6 +17,21 @@ func SafeTransport() http.RoundTripper {
 	dialer := &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
+		Control: func(network, address string, c syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return err
+			}
+			ip := net.ParseIP(host)
+			if ip == nil {
+				// Prevent bypass via IPv6 zone identifiers or invalid parsing
+				return fmt.Errorf("%w: invalid IP format %s", ErrBlockedConnection, host)
+			}
+			if isPrivateIP(ip) {
+				return fmt.Errorf("%w for %s", ErrBlockedConnection, host)
+			}
+			return nil
+		},
 	}
 
 	return &http.Transport{
@@ -26,45 +41,7 @@ func SafeTransport() http.RoundTripper {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(addr)
-			if err != nil {
-				return nil, err
-			}
-
-			r := dialer.Resolver
-			if r == nil {
-				r = net.DefaultResolver
-			}
-			ips, err := r.LookupIP(ctx, "ip", host)
-			if err != nil {
-				return nil, err
-			}
-
-			var safeIPs []net.IP
-			for _, ip := range ips {
-				if !isPrivateIP(ip) {
-					safeIPs = append(safeIPs, ip)
-				}
-			}
-
-			if len(safeIPs) == 0 {
-				return nil, fmt.Errorf("%w for %s", ErrBlockedConnection, host)
-			}
-
-			// Try dialing each safe IP until one succeeds
-			var lastErr error
-			for _, ip := range safeIPs {
-				safeAddr := net.JoinHostPort(ip.String(), port)
-				conn, err := dialer.DialContext(ctx, network, safeAddr)
-				if err == nil {
-					return conn, nil
-				}
-				lastErr = err
-			}
-
-			return nil, fmt.Errorf("failed to dial any safe IPs for %s: %w", host, lastErr)
-		},
+		DialContext:           dialer.DialContext,
 	}
 }
 
