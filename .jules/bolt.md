@@ -166,3 +166,6 @@ Ad-hoc string splitting or splitting on `/` to manually implement `url.Parse` is
 ## 2026-04-15 - Zero-allocation net/html tree traversal for goquery subtrees
 **Learning:** In GoQuery, chaining methods like `root.Union(root.Find("*"))` on large DOM subtrees causes massive hidden slice/struct allocations and iteration overhead per node.
 **Action:** Manually traverse the underlying `x/net/html` tree recursively (using `FirstChild` and `NextSibling`) to eliminate temporary struct/slice allocations when collecting nodes.
+## 2026-04-18 - Idiomatic Zero-Allocation Case-Insensitive String Matches
+**Learning:** When performing case-insensitive string matches against short constants (like DOM attributes), `strings.ToLower()` introduces unnecessary heap allocations. While writing custom byte-scanning functions can eliminate these allocations, it violates clean code principles and introduces maintenance overhead. The standard library function `strings.EqualFold()` provides the same zero-allocation benefit while maintaining perfect readability.
+**Action:** Always use `strings.EqualFold(a, b)` instead of `strings.ToLower(a) == b` when performing case-insensitive exact string comparisons in hot loops.
