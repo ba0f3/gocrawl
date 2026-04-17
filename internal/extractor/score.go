@@ -99,8 +99,9 @@ func scoreNode(sel *goquery.Selection) float64 {
 		score += 50
 	}
 	role, _ := sel.Attr("role")
-	roleNormalized := strings.ToLower(strings.TrimSpace(role))
-	if roleNormalized == "main" {
+	// ⚡ Bolt Optimization: Use strings.EqualFold for zero-allocation case-insensitive comparison
+	isMainRole := strings.EqualFold(strings.TrimSpace(role), "main")
+	if isMainRole {
 		score += 50
 	}
 	if class, ok := sel.Attr("class"); ok {
@@ -123,7 +124,7 @@ func scoreNode(sel *goquery.Selection) float64 {
 	})
 	ltf := float64(linkTextLen)
 	isSemantic := tag == "article" || tag == "main"
-	if roleNormalized == "main" {
+	if isMainRole {
 		isSemantic = true
 	}
 	if textLen > 0 {
