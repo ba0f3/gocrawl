@@ -8,6 +8,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	isantibot "github.com/ba0f3/is-antibot-go"
+	"gocrawl/internal/utils"
 )
 
 const chromedpHTMLScanMax = 256 * 1024
@@ -156,13 +157,8 @@ func looksLikeChallengePage(sample string) bool {
 	if sample == "" {
 		return false
 	}
-	low := strings.ToLower(sample)
-	for _, m := range challengeHTMLMarkers {
-		if strings.Contains(low, m) {
-			return true
-		}
-	}
-	return false
+	// ⚡ Bolt Optimization: Zero-allocation string scanning instead of strings.ToLower + strings.Contains
+	return utils.HasAnyLowercasePattern(sample, challengeHTMLMarkers)
 }
 
 // spaFrameworkHTMLMarkers are lowercase substrings typical of CSR shells (React, Next, Vue, Nuxt, Angular, SvelteKit, Remix, Astro, Vite).
@@ -196,13 +192,9 @@ var spaFrameworkHTMLMarkers = []string{
 	"vite/client",
 }
 
-func hasUICSRFrameworkMarker(low string) bool {
-	for _, m := range spaFrameworkHTMLMarkers {
-		if strings.Contains(low, m) {
-			return true
-		}
-	}
-	return false
+func hasUICSRFrameworkMarker(sample string) bool {
+	// ⚡ Bolt Optimization: Zero-allocation string scanning instead of strings.ToLower + strings.Contains
+	return utils.HasAnyLowercasePattern(sample, spaFrameworkHTMLMarkers)
 }
 
 // detectCSRFrameworkOrSPAShell returns a metadata tag and true when the HTML looks like a UI-framework CSR shell
@@ -230,13 +222,11 @@ func detectCSRFrameworkOrSPAShell(html string) (tag string, ok bool) {
 			return "spa_shell", true
 		}
 	}
-	var low string
+	sample := html
 	if len(html) > chromedpHTMLScanMax {
-		low = strings.ToLower(html[:chromedpHTMLScanMax])
-	} else {
-		low = strings.ToLower(html)
+		sample = html[:chromedpHTMLScanMax]
 	}
-	if !hasUICSRFrameworkMarker(low) {
+	if !hasUICSRFrameworkMarker(sample) {
 		return "", false
 	}
 	body := doc.Find("body").First()
