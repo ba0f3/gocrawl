@@ -1,8 +1,10 @@
 package utils
 
 // HasAnyLowercasePattern returns true if any of the provided patterns
-// (which must be lowercase) are present in s.
+// (which must be lowercase ASCII) are present in s.
 // It performs a case-insensitive check without allocating memory for strings.ToLower.
+// Note that HasAnyLowercasePattern's case-insensitive matching is ASCII-only
+// (it only folds A-Z bytes) and does not perform Unicode case folding.
 func HasAnyLowercasePattern(s string, patterns []string) bool {
 	sLen := len(s)
 	if sLen == 0 {
