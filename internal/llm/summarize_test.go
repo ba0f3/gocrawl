@@ -25,14 +25,23 @@ func TestSummarizeMarkdown_Mock(t *testing.T) {
 	}))
 	defer ts.Close()
 
+	// Use a unique timeout to prevent test cache collisions
+	testTimeout := 5*time.Second + 1*time.Millisecond
 	cfg := &config.Config{
 		LLM: config.LLMConfig{
 			Enabled: true,
 			BaseURL: ts.URL,
 			Model:   "test-model",
-			Timeout: 5 * time.Second,
+			Timeout: testTimeout,
 		},
 	}
+
+	// Inject a client into the cache to bypass SSRF protection for 127.0.0.1 in the test
+	testClient := ts.Client()
+	testClient.Timeout = testTimeout
+	clientCache.Store(testTimeout, testClient)
+	defer clientCache.Delete(testTimeout)
+
 	out, err := SummarizeMarkdown(context.Background(), cfg, "test-model", "# Hello\n\nSome markdown content that is long enough.", 2)
 	if err != nil {
 		t.Fatal(err)
