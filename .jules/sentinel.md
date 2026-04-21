@@ -20,3 +20,8 @@
 **Vulnerability:** The custom HTTP transport (`SafeTransport`) designed to block private IPs for SSRF protection failed to catch bypasses using IPv6 zone identifiers (e.g., `fe80::1%en0`).
 **Learning:** `net.ParseIP` returns `nil` for valid IPs that contain zone identifiers. The original `DialContext` override resolved the IP list manually but the standard library `net.Dialer` could fallback to the original string, resolving it internally but bypassing the application layer checks.
 **Prevention:** Rather than overriding `DialContext`, hook directly into `net.Dialer.Control`. When `net.Dialer` calls `Control` just before dialing, `net.ParseIP` will return `nil` for unparseable IPs (like those with zone identifiers). Rejecting connections where the IP cannot be strictly parsed prevents these filter bypasses entirely.
+
+## 2026-04-21 - Missing SSRF Protection in External Clients
+**Vulnerability:** External HTTP client in the LLM summarizer was vulnerable to SSRF.
+**Learning:** While the primary crawler engine used `SafeTransport` to protect against SSRF, secondary external callers (like the LLM summarize feature) used a default `http.Client`. This allowed an attacker to supply a malicious `LLM_BASE_URL` to probe internal networks.
+**Prevention:** Apply `utils.SafeTransport()` consistently across all outgoing HTTP clients in the application, not just the primary crawling engine.

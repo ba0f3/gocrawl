@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gocrawl/internal/config"
+	"gocrawl/internal/utils"
 )
 
 // Matches <think>...</think> blocks emitted by some models before the final answer.
@@ -104,7 +105,10 @@ func getHTTPClient(timeout time.Duration) *http.Client {
 	if c, ok := clientCache.Load(timeout); ok {
 		return c.(*http.Client)
 	}
-	c := &http.Client{Timeout: timeout}
+	c := &http.Client{
+		Timeout:   timeout,
+		Transport: utils.SafeTransport(),
+	}
 	actual, _ := clientCache.LoadOrStore(timeout, c)
 	return actual.(*http.Client)
 }

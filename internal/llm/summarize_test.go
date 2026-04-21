@@ -33,6 +33,13 @@ func TestSummarizeMarkdown_Mock(t *testing.T) {
 			Timeout: 5 * time.Second,
 		},
 	}
+
+	// Inject a client into the cache to bypass SSRF protection for 127.0.0.1 in the test
+	testClient := ts.Client()
+	testClient.Timeout = 5 * time.Second
+	clientCache.Store(5*time.Second, testClient)
+	defer clientCache.Delete(5 * time.Second)
+
 	out, err := SummarizeMarkdown(context.Background(), cfg, "test-model", "# Hello\n\nSome markdown content that is long enough.", 2)
 	if err != nil {
 		t.Fatal(err)
