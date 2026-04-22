@@ -426,12 +426,29 @@ func extractNextFText(rawJSON string) []string {
 	}
 
 	var texts []string
-	for _, line := range strings.Split(wire.String(), "\n") {
-		idx := strings.Index(line, "|")
+	// ⚡ Bolt Optimization: Use manual zero-allocation line scanning
+	// instead of strings.Split which allocates a huge slice for large Next.js payloads.
+	str := wire.String()
+	for {
+		idx := strings.IndexByte(str, '\n')
+		var line string
 		if idx < 0 {
+			line = str
+			str = ""
+		} else {
+			line = str[:idx]
+			str = str[idx+1:]
+		}
+
+		if len(line) == 0 && idx < 0 {
+			break
+		}
+
+		pipeIdx := strings.IndexByte(line, '|')
+		if pipeIdx < 0 {
 			continue
 		}
-		payload := line[idx+1:]
+		payload := line[pipeIdx+1:]
 		var v interface{}
 		if err := json.Unmarshal([]byte(payload), &v); err != nil {
 			continue
