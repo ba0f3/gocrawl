@@ -25,3 +25,8 @@
 **Vulnerability:** External HTTP client in the LLM summarizer was vulnerable to SSRF.
 **Learning:** While the primary crawler engine used `SafeTransport` to protect against SSRF, secondary external callers (like the LLM summarize feature) used a default `http.Client`. This allowed an attacker to supply a malicious `LLM_BASE_URL` to probe internal networks.
 **Prevention:** Apply `utils.SafeTransport()` consistently across all outgoing HTTP clients in the application, not just the primary crawling engine.
+
+## 2026-04-28 - Insecure Direct Object Reference (IDOR) in Crawl Status
+**Vulnerability:** The `/v1/crawl/{id}` endpoint did not verify that the requested crawl job belonged to the currently authenticated user.
+**Learning:** Returning a resource simply because a user is authenticated and knows the ID is a classic IDOR. Using UUIDs for IDs mitigates the risk but does not resolve the underlying missing authorization check, meaning any user who guessed or obtained an ID could view others' data.
+**Prevention:** In multi-tenant applications, every endpoint retrieving user-specific resources MUST verify ownership (e.g., `job.UserID == currentUser.ID`). When an ownership check fails, return a 404 Not Found (rather than 403 Forbidden) to simultaneously prevent data leakage and ID enumeration.
