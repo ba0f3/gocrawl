@@ -241,6 +241,20 @@ func (h *Handler) GetCrawlStatus(c *gin.Context) {
 		return
 	}
 
+	// Prevent IDOR: Verify the authenticated user owns this job
+	if h.Cfg.Security.EnableAuth {
+		if u, ok := c.Request.Context().Value("user").(*db.User); ok && u != nil {
+			if job.UserID != u.ID {
+				// Return 404 instead of 403 to prevent job ID enumeration
+				writeJSON(c, http.StatusNotFound, nil, fmt.Errorf("job not found"))
+				return
+			}
+		} else {
+			writeJSON(c, http.StatusUnauthorized, nil, fmt.Errorf("unauthorized"))
+			return
+		}
+	}
+
 	results, err := h.DB.GetCrawlResults(jobID)
 	if err != nil {
 		writeJSON(c, http.StatusInternalServerError, nil, err)
