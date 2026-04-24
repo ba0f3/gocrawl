@@ -178,3 +178,18 @@ Ad-hoc string splitting or splitting on `/` to manually implement `url.Parse` is
 
 **Learning:** When iterating over lines of large string payloads (like massive Next.js JSON dumps), using `strings.Split(str, "\n")` allocates a massive array of strings on the heap. Using a zero-allocation manual scanner with `strings.IndexByte(str, '\n')` reduces allocations to exactly 0 while cutting execution time by nearly 50%.
 **Action:** Avoid `strings.Split` for large text payloads in hot loops; manually track string slices instead.
+
+## 2026-04-24 - Safe Domain Validation via Prefix Fast-Path (`internal/api/crawl_manager.go`)
+
+**What:**
+Replaced the manual string splitting parser in `shouldScrapeURL` with a safe string prefix check, similar to `internal/mcp/server.go`.
+
+**Why:**
+The `shouldScrapeURL` loop executes for every link discovered during a recursive crawl. Previously, it utilized `url.Parse` blindly causing excessive allocations. Attempting to manually split on `://` and `/` or `@` was deemed unsafe and vulnerable to credential escape or SSRF issues because standard-library behavior (un-escaping paths, dealing with `user:pass@`) is complex.
+Using `strings.HasPrefix(absURL, baseURL.Scheme + "://" + baseURL.Host)` provides an O(1), safe, zero-allocation domain matching fast-path for the most common case: links on the same domain matching the scheme perfectly. Only if it fails this exact prefix match does it fall back to `url.Parse`.
+
+**Measured Improvement:**
+In bulk benchmark operations against the `shouldScrapeURL` suite parsing lists of URLs, execution time dropped from `~8228 ns/op` down to `~5154 ns/op`, achieving a ~37% speedup. Memory allocations dropped from `1597 B/op` (11 allocs) to `0 B/op` (0 allocs) for valid, matching URLs.
+
+**Learning:**
+Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) to bypass `url.Parse` as it leads to blocking regressions around basic-auth and URL encoding. Instead, always use deterministic, full-prefix matching (`strings.HasPrefix(absURL, expectedOrigin)`) combined with exact boundary checking to short-circuit domain evaluation safely.

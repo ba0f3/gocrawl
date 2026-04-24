@@ -341,17 +341,54 @@ func effectiveCrawlLinkSelectors(req *CrawlRequestBody) []string {
 }
 
 func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, req *CrawlRequestBody, includeRe, excludeRe *regexp.Regexp) bool {
+	// ⚡ Bolt Optimization: Safe low-allocation fast-path for domain validation.
+	// We check if the absURL starts with the expected scheme+host.
+	// If it does, we can avoid url.Parse unless we need to extract a complex path for regex matching.
+
+	expectedOrigin := baseURL.Scheme + "://" + baseURL.Host
+	isAllowedOrigin := false
+
+	if strings.HasPrefix(absURL, expectedOrigin) {
+		if len(absURL) == len(expectedOrigin) {
+			isAllowedOrigin = true
+		} else {
+			nextChar := absURL[len(expectedOrigin)]
+			if nextChar == '/' || nextChar == '?' || nextChar == '#' {
+				isAllowedOrigin = true
+			}
+		}
+	}
+
+	if !isAllowedOrigin {
+		parsedURL, err := url.Parse(absURL)
+		if err != nil {
+			return false
+		}
+		if !req.AllowExternalLinks && parsedURL.Host != baseURL.Host {
+			return false
+		}
+		if !req.AllowSubdomains && parsedURL.Host != baseURL.Host {
+			return false
+		}
+		if includeRe != nil && !includeRe.MatchString(parsedURL.Path) {
+			return false
+		}
+		if excludeRe != nil && excludeRe.MatchString(parsedURL.Path) {
+			return false
+		}
+		return true
+	}
+
+	if includeRe == nil && excludeRe == nil {
+		return true
+	}
+
+	// For path extraction when regex is needed, fallback to url.Parse for safety (unescaping, etc.)
 	parsedURL, err := url.Parse(absURL)
 	if err != nil {
 		return false
 	}
-	if !req.AllowExternalLinks && parsedURL.Host != baseURL.Host {
-		return false
-	}
-	if !req.AllowSubdomains && parsedURL.Host != baseURL.Host {
-		return false
-	}
-	// ⚡ Bolt Optimization: Use pre-compiled regex instead of inner string loops.
+
 	if includeRe != nil && !includeRe.MatchString(parsedURL.Path) {
 		return false
 	}
