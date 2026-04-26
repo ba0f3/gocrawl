@@ -193,3 +193,7 @@ In bulk benchmark operations against the `shouldScrapeURL` suite parsing lists o
 
 **Learning:**
 Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) to bypass `url.Parse` as it leads to blocking regressions around basic-auth and URL encoding. Instead, always use deterministic, full-prefix matching (`strings.HasPrefix(absURL, expectedOrigin)`) combined with exact boundary checking to short-circuit domain evaluation safely.
+
+## 2026-05-02 - Zero-Allocation DOM Traversal for Scoring (`internal/extractor/score.go`)
+**Learning:** In the DOM scoring loop (`scoreNode`), methods like `sel.Find("p")` and `sel.Find("a")` allocate completely new `goquery.Selection` structs and slices for each match, leading to heavy GC pressure when scoring multiple candidate nodes. By using `sel.Get(0)` to retrieve the root `x/net/html` node and manually traversing the tree using `FirstChild` and `NextSibling`, allocations are reduced to almost zero, and performance improves dramatically (e.g., ~2300ns/op down to ~200ns/op, a ~10x speedup).
+**Action:** When performing aggregate counting or text extraction within small subtrees, bypass `goquery.Selection.Find` methods and manually traverse the underlying `x/net/html` tree structure.

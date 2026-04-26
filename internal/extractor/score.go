@@ -115,13 +115,19 @@ func scoreNode(sel *goquery.Selection) float64 {
 			score += 25
 		}
 	}
-	pCount := float64(sel.Find("p").Length())
-	score += pCount * 3
-
+	// ⚡ Bolt Optimization: Manually traverse x/net/html nodes
+	// instead of using goquery's Find() which allocates many new objects.
+	pCount := 0
 	linkTextLen := 0
-	sel.Find("a").Each(func(_ int, a *goquery.Selection) {
-		linkTextLen += len(strings.TrimSpace(a.Text()))
-	})
+
+	if rootNode := sel.Get(0); rootNode != nil {
+		var buf strings.Builder
+		for c := rootNode.FirstChild; c != nil; c = c.NextSibling {
+			countPAndA(c, &pCount, &linkTextLen, &buf)
+		}
+	}
+
+	score += float64(pCount) * 3
 	ltf := float64(linkTextLen)
 	isSemantic := tag == "article" || tag == "main"
 	if isMainRole {
@@ -144,4 +150,30 @@ func scoreNode(sel *goquery.Selection) float64 {
 		}
 	}
 	return score
+}
+
+func extractNodeText(n *html.Node, buf *strings.Builder) {
+	if n.Type == html.TextNode {
+		buf.WriteString(n.Data)
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		extractNodeText(c, buf)
+	}
+}
+
+func countPAndA(n *html.Node, pCount *int, linkTextLen *int, buf *strings.Builder) {
+	if n.Type == html.ElementNode {
+		if n.Data == "p" {
+			*pCount++
+		} else if n.Data == "a" {
+			buf.Reset()
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				extractNodeText(c, buf)
+			}
+			*linkTextLen += len(strings.TrimSpace(buf.String()))
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		countPAndA(c, pCount, linkTextLen, buf)
+	}
 }
