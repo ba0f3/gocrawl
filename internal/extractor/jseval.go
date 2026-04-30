@@ -132,14 +132,6 @@ var errExecutionTimeout = errors.New("execution timeout")
 
 const maxExtractedTextBytes = 256 * 1024
 
-var classicScriptTypes = map[string]struct{}{
-	"":                       {},
-	"text/javascript":        {},
-	"application/javascript": {},
-	"text/ecmascript":        {},
-	"application/ecmascript": {},
-}
-
 // JsDataBlob holds data extracted from inline script execution (webclaw-style).
 type JsDataBlob struct {
 	Name string `json:"name"`
@@ -159,8 +151,16 @@ func ExtractJsDataFromHTML(html string) []JsDataBlob {
 			return
 		}
 		t, _ := s.Attr("type")
-		t = strings.ToLower(strings.TrimSpace(t))
-		if _, ok := classicScriptTypes[t]; !ok {
+
+		// ⚡ Bolt Optimization: Use zero-allocation EqualFold instead of strings.ToLower
+		tTrim := strings.TrimSpace(t)
+		isClassic := tTrim == "" ||
+			strings.EqualFold(tTrim, "text/javascript") ||
+			strings.EqualFold(tTrim, "application/javascript") ||
+			strings.EqualFold(tTrim, "text/ecmascript") ||
+			strings.EqualFold(tTrim, "application/ecmascript")
+
+		if !isClassic {
 			return
 		}
 		txt := strings.TrimSpace(s.Text())

@@ -13,10 +13,6 @@ var noiseTags = map[string]struct{}{
 	"footer": {}, "header": {}, "form": {}, "video": {}, "audio": {}, "canvas": {},
 }
 
-var noiseRoles = map[string]struct{}{
-	"navigation": {}, "banner": {}, "complementary": {}, "contentinfo": {},
-}
-
 var noiseClassesExact = map[string]struct{}{
 	"header": {}, "top": {}, "navbar": {}, "footer": {}, "bottom": {}, "sidebar": {},
 	"modal": {}, "popup": {}, "overlay": {}, "ad": {}, "ads": {}, "advert": {},
@@ -63,7 +59,12 @@ func IsNoise(sel *goquery.Selection) bool {
 		return true
 	}
 	if role, _ := sel.Attr("role"); role != "" {
-		if _, ok := noiseRoles[strings.ToLower(strings.TrimSpace(role))]; ok {
+		// ⚡ Bolt Optimization: Use zero-allocation EqualFold instead of strings.ToLower
+		rTrim := strings.TrimSpace(role)
+		if strings.EqualFold(rTrim, "navigation") ||
+			strings.EqualFold(rTrim, "banner") ||
+			strings.EqualFold(rTrim, "complementary") ||
+			strings.EqualFold(rTrim, "contentinfo") {
 			return true
 		}
 	}
