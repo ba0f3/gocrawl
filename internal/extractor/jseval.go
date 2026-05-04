@@ -10,6 +10,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"gocrawl/internal/utils"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/dop251/goja"
 )
@@ -259,7 +261,8 @@ func isExecutionTimeoutErr(err error) bool {
 	if errors.Is(err, errExecutionTimeout) {
 		return true
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "execution timeout")
+	// ⚡ Bolt Optimization: Use zero-allocation HasAnyLowercasePattern instead of strings.ToLower
+	return utils.HasAnyLowercasePattern(err.Error(), []string{"execution timeout"})
 }
 
 // ExtractReadableTextFromBlobs walks JSON blobs and builds a markdown section (webclaw-style).
