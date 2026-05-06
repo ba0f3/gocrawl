@@ -79,12 +79,75 @@ func isUnderExcluded(sel *goquery.Selection, exclude map[*html.Node]struct{}) bo
 	return false
 }
 
+func isSpace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' || b == '\v'
+}
+
+// ⚡ Bolt Optimization: Calculate trimmed text length via zero-allocation manual tree traversal
+func calculateTrimmedTextLength(n *html.Node) int {
+	if n == nil {
+		return 0
+	}
+
+	var firstNonSpaceFound bool
+	var totalBytes int
+	var trailingSpaceBytes int
+
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node.Type == html.TextNode {
+			data := node.Data
+
+			if !firstNonSpaceFound {
+				start := 0
+				for start < len(data) && isSpace(data[start]) {
+					start++
+				}
+
+				if start < len(data) {
+					firstNonSpaceFound = true
+					totalBytes += len(data) - start
+
+					end := len(data)
+					for end > start && isSpace(data[end-1]) {
+						end--
+					}
+					trailingSpaceBytes = len(data) - end
+				}
+			} else {
+				totalBytes += len(data)
+
+				end := len(data)
+				for end > 0 && isSpace(data[end-1]) {
+					end--
+				}
+				if end == 0 {
+					trailingSpaceBytes += len(data)
+				} else {
+					trailingSpaceBytes = len(data) - end
+				}
+			}
+		}
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+
+	if !firstNonSpaceFound {
+		return 0
+	}
+
+	return totalBytes - trailingSpaceBytes
+}
+
 func scoreNode(sel *goquery.Selection) float64 {
 	if sel.Length() == 0 {
 		return 0
 	}
-	text := strings.TrimSpace(sel.Text())
-	textLen := float64(len(text))
+	// ⚡ Bolt Optimization: Use zero-allocation calculateTrimmedTextLength
+	// instead of strings.TrimSpace(sel.Text()) which creates heavy string allocations
+	textLen := float64(calculateTrimmedTextLength(sel.Get(0)))
 	if textLen < 50 {
 		return 0
 	}
