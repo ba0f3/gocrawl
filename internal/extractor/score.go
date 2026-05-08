@@ -184,9 +184,8 @@ func scoreNode(sel *goquery.Selection) float64 {
 	linkTextLen := 0
 
 	if rootNode := sel.Get(0); rootNode != nil {
-		var buf strings.Builder
 		for c := rootNode.FirstChild; c != nil; c = c.NextSibling {
-			countPAndA(c, &pCount, &linkTextLen, &buf)
+			countPAndA(c, &pCount, &linkTextLen)
 		}
 	}
 
@@ -215,28 +214,17 @@ func scoreNode(sel *goquery.Selection) float64 {
 	return score
 }
 
-func extractNodeText(n *html.Node, buf *strings.Builder) {
-	if n.Type == html.TextNode {
-		buf.WriteString(n.Data)
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		extractNodeText(c, buf)
-	}
-}
-
-func countPAndA(n *html.Node, pCount *int, linkTextLen *int, buf *strings.Builder) {
+func countPAndA(n *html.Node, pCount *int, linkTextLen *int) {
 	if n.Type == html.ElementNode {
 		if n.Data == "p" {
 			*pCount++
 		} else if n.Data == "a" {
-			buf.Reset()
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				extractNodeText(c, buf)
-			}
-			*linkTextLen += len(strings.TrimSpace(buf.String()))
+			// ⚡ Bolt Optimization: Use zero-allocation trimmed text calculation
+			// instead of strings.Builder + strings.TrimSpace
+			*linkTextLen += calculateTrimmedTextLength(n)
 		}
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		countPAndA(c, pCount, linkTextLen, buf)
+		countPAndA(c, pCount, linkTextLen)
 	}
 }
