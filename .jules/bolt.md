@@ -208,3 +208,7 @@ Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) 
 ## 2024-05-06 - Replacing strings.TrimSpace(sel.Text()) with calculateTrimmedTextLength
 **Learning:** In hot loops mapping over nodes to calculate scores (like `scoreNode` in `internal/extractor/score.go`), calling `sel.Text()` followed by `strings.TrimSpace()` creates a huge string allocation of the concatenated text, only to measure its length and immediately throw it away.
 **Action:** Replace `strings.TrimSpace(sel.Text())` with a manual, zero-allocation `calculateTrimmedTextLength` function that walks the `html.Node` tree and accumulates lengths of `html.TextNode` elements directly, carefully trimming leading spaces on the first text node and calculating total trailing spaces correctly. This results in a roughly 10x performance speedup (from 1085ns to 109ns) and reduces allocations from 2 to 0 per call.
+
+## 2026-05-19 - Zero-Allocation Token Evaluation in IsNoise
+**Learning:** In the DOM node filtering loops (`IsNoise`), relying on `strings.ToLower` for class string values and map lookups for exact matches generates significant heap allocations due to strings containing uppercase or mixed-case values.
+**Action:** Remove `strings.ToLower` entirely. Instead, convert token exact-match maps to string slices and use `strings.EqualFold(tok, exactStr)` and zero-allocation prefix scans to evaluate DOM tokens without allocating new lowercased strings.

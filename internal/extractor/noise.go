@@ -5,6 +5,7 @@ import (
 	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
+	"gocrawl/internal/utils"
 	"golang.org/x/net/html"
 )
 
@@ -13,21 +14,21 @@ var noiseTags = map[string]struct{}{
 	"footer": {}, "header": {}, "form": {}, "video": {}, "audio": {}, "canvas": {},
 }
 
-var noiseClassesExact = map[string]struct{}{
-	"header": {}, "top": {}, "navbar": {}, "footer": {}, "bottom": {}, "sidebar": {},
-	"modal": {}, "popup": {}, "overlay": {}, "ad": {}, "ads": {}, "advert": {},
-	"lang-selector": {}, "language": {}, "social": {}, "social-media": {}, "social-links": {},
-	"menu": {}, "navigation": {}, "breadcrumbs": {}, "breadcrumb": {}, "share": {},
-	"widget": {}, "cookie": {}, "newsletter": {}, "subscribe": {}, "skip-link": {},
-	"sr-only": {}, "visually-hidden": {}, "notification": {}, "alert": {}, "toast": {},
-	"pagination": {}, "pager": {}, "signup": {}, "login-form": {}, "search-form": {},
-	"related-posts": {}, "recommended": {},
+var exactNoiseClasses = []string{
+	"header", "top", "navbar", "footer", "bottom", "sidebar",
+	"modal", "popup", "overlay", "ad", "ads", "advert",
+	"lang-selector", "language", "social", "social-media", "social-links",
+	"menu", "navigation", "breadcrumbs", "breadcrumb", "share",
+	"widget", "cookie", "newsletter", "subscribe", "skip-link",
+	"sr-only", "visually-hidden", "notification", "alert", "toast",
+	"pagination", "pager", "signup", "login-form", "search-form",
+	"related-posts", "recommended",
 }
 
-var noiseIDsExact = map[string]struct{}{
-	"header": {}, "footer": {}, "nav": {}, "sidebar": {}, "menu": {}, "modal": {},
-	"popup": {}, "cookie": {}, "breadcrumbs": {}, "widget": {}, "ad": {}, "social": {},
-	"share": {}, "newsletter": {}, "subscribe": {}, "comments": {}, "related": {}, "recommended": {},
+var exactNoiseIDs = []string{
+	"header", "footer", "nav", "sidebar", "menu", "modal",
+	"popup", "cookie", "breadcrumbs", "widget", "ad", "social",
+	"share", "newsletter", "subscribe", "comments", "related", "recommended",
 }
 
 var cookieConsentIDPrefixes = []string{
@@ -69,22 +70,20 @@ func IsNoise(sel *goquery.Selection) bool {
 		}
 	}
 	if class, ok := sel.Attr("class"); ok {
-		lc := strings.ToLower(class)
-		for _, p := range longNoisePatterns {
-			if strings.Contains(lc, p) {
-				return true
-			}
+		// ⚡ Bolt Optimization: Zero-allocation string scanning instead of strings.ToLower + strings.Contains
+		if utils.HasAnyLowercasePattern(class, longNoisePatterns) {
+			return true
 		}
 
 		// ⚡ Bolt Optimization: Use unified zero-allocation token scanning
 		// instead of multiple passes with strings.Fields, isAdClass, and hasNoiseClassPattern.
 		start := -1
-		for i, r := range lc {
+		for i, r := range class {
 			isSpace := unicode.IsSpace(r)
 			if !isSpace && start == -1 {
 				start = i
 			} else if isSpace && start != -1 {
-				tok := lc[start:i]
+				tok := class[start:i]
 				start = -1
 
 				if isNoiseToken(tok) {
@@ -93,18 +92,27 @@ func IsNoise(sel *goquery.Selection) bool {
 			}
 		}
 		if start != -1 {
-			if isNoiseToken(lc[start:]) {
+			if isNoiseToken(class[start:]) {
 				return true
 			}
 		}
 	}
 	if id, ok := sel.Attr("id"); ok {
-		idLower := strings.ToLower(id)
-		if _, hit := noiseIDsExact[idLower]; hit && !isStructuralID(idLower) {
+		// ⚡ Bolt Optimization: Zero-allocation case-insensitive matching
+		isNoiseID := false
+		for _, p := range exactNoiseIDs {
+			if len(id) == len(p) && strings.EqualFold(id, p) {
+				isNoiseID = true
+				break
+			}
+		}
+
+		if isNoiseID && !isStructuralID(id) {
 			return true
 		}
+
 		for _, p := range cookieConsentIDPrefixes {
-			if strings.HasPrefix(idLower, p) {
+			if hasEqualFoldPrefix(id, p) {
 				return true
 			}
 		}
@@ -130,25 +138,30 @@ func IsNoiseDescendant(sel *goquery.Selection) bool {
 	return false
 }
 
-func isStructuralID(id string) bool {
-	for _, s := range structuralIDSuffixes {
-		if strings.Contains(id, s) {
-			return true
-		}
+// ⚡ Bolt Optimization: Zero-allocation prefix check
+func hasEqualFoldPrefix(s, prefix string) bool {
+	if len(s) < len(prefix) {
+		return false
 	}
-	return false
+	return strings.EqualFold(s[:len(prefix)], prefix)
+}
+
+func isStructuralID(id string) bool {
+	return utils.HasAnyLowercasePattern(id, structuralIDSuffixes)
 }
 
 func isNoiseToken(tok string) bool {
 	for _, p := range cookieConsentClassPrefixes {
-		if strings.HasPrefix(tok, p) {
+		if hasEqualFoldPrefix(tok, p) {
 			return true
 		}
 	}
-	if _, hit := noiseClassesExact[tok]; hit {
-		return true
+	for _, p := range exactNoiseClasses {
+		if len(tok) == len(p) && strings.EqualFold(tok, p) {
+			return true
+		}
 	}
-	if strings.HasPrefix(tok, "footer") || strings.HasPrefix(tok, "header-") || strings.HasPrefix(tok, "nav-") {
+	if hasEqualFoldPrefix(tok, "footer") || hasEqualFoldPrefix(tok, "header-") || hasEqualFoldPrefix(tok, "nav-") {
 		return true
 	}
 	if isAdClassToken(tok) {
@@ -158,10 +171,12 @@ func isNoiseToken(tok string) bool {
 	t := tok
 	if idx := strings.LastIndex(t, ":"); idx >= 0 {
 		t = t[idx+1:]
-		if _, hit := noiseClassesExact[t]; hit {
-			return true
+		for _, p := range exactNoiseClasses {
+			if len(t) == len(p) && strings.EqualFold(t, p) {
+				return true
+			}
 		}
-		if strings.HasPrefix(t, "footer") || strings.HasPrefix(t, "header-") || strings.HasPrefix(t, "nav-") {
+		if hasEqualFoldPrefix(t, "footer") || hasEqualFoldPrefix(t, "header-") || hasEqualFoldPrefix(t, "nav-") {
 			return true
 		}
 		if isAdClassToken(t) {
@@ -177,15 +192,30 @@ func isNoiseToken(tok string) bool {
 }
 
 func isAdClassToken(tok string) bool {
-	if tok == "ad" {
+	if len(tok) == 2 && strings.EqualFold(tok, "ad") {
 		return true
 	}
 	l := len(tok)
 	if l >= 3 {
-		if tok[0] == 'a' && tok[1] == 'd' && (tok[2] == '-' || tok[2] == '_') {
+		c0, c1, c2 := tok[0], tok[1], tok[2]
+		if c0 >= 'A' && c0 <= 'Z' {
+			c0 += 'a' - 'A'
+		}
+		if c1 >= 'A' && c1 <= 'Z' {
+			c1 += 'a' - 'A'
+		}
+		if c0 == 'a' && c1 == 'd' && (c2 == '-' || c2 == '_') {
 			return true
 		}
-		if (tok[l-3] == '-' || tok[l-3] == '_') && tok[l-2] == 'a' && tok[l-1] == 'd' {
+
+		cEnd2, cEnd1, cEnd0 := tok[l-3], tok[l-2], tok[l-1]
+		if cEnd1 >= 'A' && cEnd1 <= 'Z' {
+			cEnd1 += 'a' - 'A'
+		}
+		if cEnd0 >= 'A' && cEnd0 <= 'Z' {
+			cEnd0 += 'a' - 'A'
+		}
+		if (cEnd2 == '-' || cEnd2 == '_') && cEnd1 == 'a' && cEnd0 == 'd' {
 			return true
 		}
 	}
@@ -200,20 +230,32 @@ var longNoisePatterns = []string{
 var shortNoisePatterns = []string{"nav", "top", "side", "menu", "widget", "header", "footer"}
 
 func wordBoundaryMatch(text, pattern string) bool {
-	start := 0
-	for {
-		idx := strings.Index(text[start:], pattern)
-		if idx < 0 {
-			break
+	// ⚡ Bolt Optimization: Zero-allocation case-insensitive substring match with boundary checks
+	tLen := len(text)
+	pLen := len(pattern)
+	if pLen > tLen {
+		return false
+	}
+	for i := 0; i <= tLen-pLen; i++ {
+		match := true
+		for j := 0; j < pLen; j++ {
+			c := text[i+j]
+			if c >= 'A' && c <= 'Z' {
+				c += 'a' - 'A'
+			}
+			if c != pattern[j] {
+				match = false
+				break
+			}
 		}
-		abs := start + idx
-		beforeOK := abs == 0 || text[abs-1] == '-' || text[abs-1] == '_'
-		end := abs + len(pattern)
-		afterOK := end == len(text) || text[end] == '-' || text[end] == '_'
-		if beforeOK && afterOK {
-			return true
+		if match {
+			beforeOK := i == 0 || text[i-1] == '-' || text[i-1] == '_'
+			end := i + pLen
+			afterOK := end == tLen || text[end] == '-' || text[end] == '_'
+			if beforeOK && afterOK {
+				return true
+			}
 		}
-		start = abs + 1
 	}
 	return false
 }
