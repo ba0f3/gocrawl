@@ -212,3 +212,7 @@ Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) 
 ## 2026-05-19 - Zero-Allocation Token Evaluation in IsNoise
 **Learning:** In the DOM node filtering loops (`IsNoise`), relying on `strings.ToLower` for class string values and map lookups for exact matches generates significant heap allocations due to strings containing uppercase or mixed-case values.
 **Action:** Remove `strings.ToLower` entirely. Instead, convert token exact-match maps to string slices and use `strings.EqualFold(tok, exactStr)` and zero-allocation prefix scans to evaluate DOM tokens without allocating new lowercased strings.
+
+## 2026-05-08 - Zero-Allocation Text Length Calculation for Links in Scoring
+**Learning:** During node scoring (`internal/extractor/score.go`), counting link text lengths using `strings.Builder` followed by `strings.TrimSpace` results in unnecessary allocations (heap allocations for every link analyzed). Replacing this with the pre-existing `calculateTrimmedTextLength` zero-allocation node traverser speeds up the DOM scoring heavily by dropping allocations for links to exactly zero.
+**Action:** Eliminate `strings.Builder` and `strings.TrimSpace` chains for evaluating link lengths. Traverse the tree natively to sum lengths instead.
