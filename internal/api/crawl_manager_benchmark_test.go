@@ -57,10 +57,12 @@ func BenchmarkShouldScrapeURL(b *testing.B) {
 		excludeRe = regexp.MustCompile(strings.Join(parts, "|"))
 	}
 
+	expectedOrigin := baseURL.Scheme + "://" + baseURL.Host
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, u := range testCases {
-			cm.shouldScrapeURL(u, baseURL, req, includeRe, excludeRe)
+			cm.shouldScrapeURL(u, baseURL, expectedOrigin, req, includeRe, excludeRe)
 		}
 	}
 }

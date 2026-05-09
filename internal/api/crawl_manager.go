@@ -177,6 +177,9 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 		return results
 	}
 
+	// ⚡ Bolt Optimization: Hoist expected origin calculation out of the OnHTML hot loop
+	expectedOrigin := baseURL.Scheme + "://" + baseURL.Host
+
 	// ⚡ Bolt Optimization: Pre-compile IncludePaths and ExcludePaths into regular expressions.
 	// This avoids repeatedly iterating and doing strings.Contains for every discovered URL,
 	// significantly improving performance when these lists are large.
@@ -240,17 +243,17 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 	if crawlLinkSelectors := effectiveCrawlLinkSelectors(req); len(crawlLinkSelectors) > 0 {
 		sel := strings.Join(crawlLinkSelectors, ", ")
 		c.OnHTML(sel, func(e *colly.HTMLElement) {
-			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu, includeRe, excludeRe)
+			cm.visitIfAllowed(e, baseURL, expectedOrigin, req, visited, &crawlMu, includeRe, excludeRe)
 		})
 	} else {
 		c.OnHTML("article a[href], main a[href], [role=main] a[href], .post a[href], .entry-content a[href]", func(e *colly.HTMLElement) {
-			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu, includeRe, excludeRe)
+			cm.visitIfAllowed(e, baseURL, expectedOrigin, req, visited, &crawlMu, includeRe, excludeRe)
 		})
 		c.OnHTML("a[href]", func(e *colly.HTMLElement) {
 			if linkInArticleOrMain(e) {
 				return
 			}
-			cm.visitIfAllowed(e, baseURL, req, visited, &crawlMu, includeRe, excludeRe)
+			cm.visitIfAllowed(e, baseURL, expectedOrigin, req, visited, &crawlMu, includeRe, excludeRe)
 		})
 	}
 
@@ -303,14 +306,14 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 	return results
 }
 
-func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, req *CrawlRequestBody, visited map[string]bool, mu *sync.Mutex, includeRe, excludeRe *regexp.Regexp) {
+func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, expectedOrigin string, req *CrawlRequestBody, visited map[string]bool, mu *sync.Mutex, includeRe, excludeRe *regexp.Regexp) {
 	link := e.Attr("href")
 	absURL := e.Request.AbsoluteURL(link)
 	mu.Lock()
 	// ⚡ Bolt Optimization: Checking !visited[absURL] first enables O(1) map lookup short-circuiting.
 	// If the URL has already been visited, this avoids calling shouldScrapeURL which involves parsing the URL,
 	// string manipulations, and regex matching. This drops the evaluation time for already-visited URLs significantly.
-	if !visited[absURL] && cm.shouldScrapeURL(absURL, baseURL, req, includeRe, excludeRe) {
+	if !visited[absURL] && cm.shouldScrapeURL(absURL, baseURL, expectedOrigin, req, includeRe, excludeRe) {
 		visited[absURL] = true
 		if len(visited) <= req.Limit {
 			mu.Unlock()
@@ -340,12 +343,11 @@ func effectiveCrawlLinkSelectors(req *CrawlRequestBody) []string {
 	return out
 }
 
-func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, req *CrawlRequestBody, includeRe, excludeRe *regexp.Regexp) bool {
+func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, expectedOrigin string, req *CrawlRequestBody, includeRe, excludeRe *regexp.Regexp) bool {
 	// ⚡ Bolt Optimization: Safe low-allocation fast-path for domain validation.
 	// We check if the absURL starts with the expected scheme+host.
 	// If it does, we can avoid url.Parse unless we need to extract a complex path for regex matching.
 
-	expectedOrigin := baseURL.Scheme + "://" + baseURL.Host
 	isAllowedOrigin := false
 
 	if strings.HasPrefix(absURL, expectedOrigin) {
