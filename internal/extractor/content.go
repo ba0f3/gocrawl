@@ -4,12 +4,13 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 var mainOnlySelector = "article, main, [role='main']"
 
 // ExtractMainHTML returns inner HTML of the best main-content subtree using webclaw-style logic.
-func ExtractMainHTML(doc *goquery.Document, _ string, opts *ExtractionOptions) (html string, err error) {
+func ExtractMainHTML(doc *goquery.Document, _ string, opts *ExtractionOptions) (htmlRes string, err error) {
 	if doc == nil {
 		return "", nil
 	}
@@ -37,8 +38,40 @@ func ExtractMainHTML(doc *goquery.Document, _ string, opts *ExtractionOptions) (
 	}
 
 	if opts.OnlyMainContent {
-		if sel := doc.Find(mainOnlySelector).First(); sel.Length() > 0 {
-			if h, e := sel.Html(); e == nil {
+		// ⚡ Bolt Optimization: Manually traverse x/net/html tree
+		// to avoid goquery.Find multi-selector allocation overhead.
+		var firstMain *goquery.Selection
+		var walkMain func(*html.Node)
+		walkMain = func(n *html.Node) {
+			if firstMain != nil {
+				return
+			}
+			if n.Type == html.ElementNode {
+				tag := n.Data
+				isMain := tag == "article" || tag == "main"
+				if !isMain {
+					for _, a := range n.Attr {
+						if strings.EqualFold(a.Key, "role") && strings.EqualFold(a.Val, "main") {
+							isMain = true
+							break
+						}
+					}
+				}
+				if isMain {
+					firstMain = &goquery.Selection{Nodes: []*html.Node{n}}
+					return
+				}
+			}
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walkMain(c)
+			}
+		}
+		for _, n := range doc.Nodes {
+			walkMain(n)
+		}
+
+		if firstMain != nil {
+			if h, e := firstMain.Html(); e == nil {
 				return h, nil
 			}
 		}

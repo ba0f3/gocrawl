@@ -44,24 +44,52 @@ func hasScorePattern(s string, patterns []string) bool {
 	return false
 }
 
+// ⚡ Bolt Optimization: Zero-allocation candidate node check
+func isCandidateNode(n *html.Node) bool {
+	if n == nil || n.Type != html.ElementNode {
+		return false
+	}
+	tag := n.Data
+	if tag == "article" || tag == "main" || tag == "div" || tag == "section" || tag == "td" {
+		return true
+	}
+	for _, a := range n.Attr {
+		if strings.EqualFold(a.Key, "role") && strings.EqualFold(a.Val, "main") {
+			return true
+		}
+	}
+	return false
+}
+
 func findBestCandidate(doc *goquery.Document, exclude map[*html.Node]struct{}) *goquery.Selection {
 	var best *goquery.Selection
 	var bestScore float64
 
-	doc.Find(candidateSelector).Each(func(_ int, s *goquery.Selection) {
-		n := s.Get(0)
-		if n == nil || isExcluded(n, exclude) {
-			return
+	// ⚡ Bolt Optimization: Manually traverse x/net/html tree
+	// instead of using goquery.Find with a complex multi-selector which allocates heavily.
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if isCandidateNode(n) {
+			if !isExcluded(n, exclude) {
+				s := &goquery.Selection{Nodes: []*html.Node{n}}
+				if !IsNoise(s) && !IsNoiseDescendant(s) && !isUnderExcluded(s, exclude) {
+					sc := scoreNode(s)
+					if sc > 0 && (best == nil || sc > bestScore) {
+						best = s
+						bestScore = sc
+					}
+				}
+			}
 		}
-		if IsNoise(s) || IsNoiseDescendant(s) || isUnderExcluded(s, exclude) {
-			return
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
 		}
-		sc := scoreNode(s)
-		if sc > 0 && (best == nil || sc > bestScore) {
-			best = s
-			bestScore = sc
-		}
-	})
+	}
+
+	for _, n := range doc.Nodes {
+		walk(n)
+	}
+
 	return best
 }
 
