@@ -72,13 +72,13 @@ func AuthMiddleware(database db.Store, enableAuth bool) func(http.Handler) http.
 			}
 
 			// Extract API key from "Bearer <api_key>"
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || parts[0] != "Bearer" {
+			// ⚡ Bolt Optimization: Use zero-allocation EqualFold and slicing instead of strings.SplitN
+			if len(authHeader) <= 7 || !strings.EqualFold(authHeader[:7], "Bearer ") {
 				http.Error(w, "Invalid authorization header format", http.StatusUnauthorized)
 				return
 			}
 
-			apiKey := parts[1]
+			apiKey := authHeader[7:]
 			u, err := user.GetUserByAPIKey(database, apiKey)
 			if err != nil {
 				http.Error(w, "Invalid API key", http.StatusUnauthorized)
@@ -113,9 +113,11 @@ func RateLimitMiddleware(cfg config.RateLimitConfig) func(http.Handler) http.Han
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			key := "ip:" + req.RemoteAddr
 			if ah := req.Header.Get("Authorization"); ah != "" {
-				parts := strings.SplitN(ah, " ", 2)
-				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && parts[1] != "" {
-					key = "key:" + parts[1]
+				// ⚡ Bolt Optimization: Use zero-allocation EqualFold and slicing instead of strings.SplitN
+				if len(ah) > 7 && strings.EqualFold(ah[:7], "Bearer ") {
+					if apiKey := ah[7:]; apiKey != "" {
+						key = "key:" + apiKey
+					}
 				}
 			}
 			mu.Lock()
@@ -183,13 +185,15 @@ func GinAuthMiddleware(database db.Store, enableAuth bool) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
+
+		// ⚡ Bolt Optimization: Use zero-allocation EqualFold and slicing instead of strings.SplitN
+		if len(authHeader) <= 7 || !strings.EqualFold(authHeader[:7], "Bearer ") {
 			c.String(http.StatusUnauthorized, "Invalid authorization header format")
 			c.Abort()
 			return
 		}
-		u, err := user.GetUserByAPIKey(database, parts[1])
+
+		u, err := user.GetUserByAPIKey(database, authHeader[7:])
 		if err != nil {
 			c.String(http.StatusUnauthorized, "Invalid API key")
 			c.Abort()
@@ -221,9 +225,11 @@ func GinRateLimitMiddleware(cfg config.RateLimitConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		key := "ip:" + c.ClientIP()
 		if ah := c.GetHeader("Authorization"); ah != "" {
-			parts := strings.SplitN(ah, " ", 2)
-			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && parts[1] != "" {
-				key = "key:" + parts[1]
+			// ⚡ Bolt Optimization: Use zero-allocation EqualFold and slicing instead of strings.SplitN
+			if len(ah) > 7 && strings.EqualFold(ah[:7], "Bearer ") {
+				if apiKey := ah[7:]; apiKey != "" {
+					key = "key:" + apiKey
+				}
 			}
 		}
 		mu.Lock()
