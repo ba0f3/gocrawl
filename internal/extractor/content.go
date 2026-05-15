@@ -7,8 +7,6 @@ import (
 	"golang.org/x/net/html"
 )
 
-var mainOnlySelector = "article, main, [role='main']"
-
 // ExtractMainHTML returns inner HTML of the best main-content subtree using webclaw-style logic.
 func ExtractMainHTML(doc *goquery.Document, _ string, opts *ExtractionOptions) (htmlRes string, err error) {
 	if doc == nil {
