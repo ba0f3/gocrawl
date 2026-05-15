@@ -19,7 +19,7 @@ func NewRouter(h *Handler, cfg *config.Config) *gin.Engine {
 	}
 
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(gin.Recovery(), GinSecurityHeadersMiddleware())
 
 	v1 := r.Group("/v1")
 	v1.Use(GinLoggingMiddleware(), GinCORSMiddleware(cfg.Security.AllowedOrigins))

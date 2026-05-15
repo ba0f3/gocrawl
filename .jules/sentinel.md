@@ -30,3 +30,8 @@
 **Vulnerability:** The `/v1/crawl/{id}` endpoint did not verify that the requested crawl job belonged to the currently authenticated user.
 **Learning:** Returning a resource simply because a user is authenticated and knows the ID is a classic IDOR. Using UUIDs for IDs mitigates the risk but does not resolve the underlying missing authorization check, meaning any user who guessed or obtained an ID could view others' data.
 **Prevention:** In multi-tenant applications, every endpoint retrieving user-specific resources MUST verify ownership (e.g., `job.UserID == currentUser.ID`). When an ownership check fails, return a 404 Not Found (rather than 403 Forbidden) to simultaneously prevent data leakage and ID enumeration.
+
+## 2026-05-14 - Missing Security Headers Mitigation
+**Vulnerability:** The application API lacked standard HTTP security headers (e.g. `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Content-Security-Policy`), leaving browsers without strict guidance on how to securely handle responses, opening vectors for XSS, MIME-sniffing, and clickjacking attacks.
+**Learning:** While CORS policies protect cross-origin fetching, they do not inherently protect the application from client-side execution attacks when endpoints are accessed directly.
+**Prevention:** Apply a global middleware (e.g., `GinSecurityHeadersMiddleware`) that sets conservative baseline security headers (like `X-Content-Type-Options: nosniff` and `default-src 'self'`) on all API responses.
