@@ -308,7 +308,7 @@ func (cm *CrawlManager) performCrawling(ctx context.Context, req *CrawlRequestBo
 
 func (cm *CrawlManager) visitIfAllowed(e *colly.HTMLElement, baseURL *url.URL, expectedOrigin string, req *CrawlRequestBody, visited map[string]bool, mu *sync.Mutex, includeRe, excludeRe *regexp.Regexp) {
 	link := e.Attr("href")
-	absURL := e.Request.AbsoluteURL(link)
+	absURL := utils.ResolveHref(e.Request.URL, link)
 	mu.Lock()
 	// ⚡ Bolt Optimization: Checking !visited[absURL] first enables O(1) map lookup short-circuiting.
 	// If the URL has already been visited, this avoids calling shouldScrapeURL which involves parsing the URL,
