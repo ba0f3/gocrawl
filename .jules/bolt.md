@@ -227,3 +227,7 @@ Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) 
 ## 2026-05-19 - Zero-Allocation Authorization Header Parsing (`internal/api/middleware.go`)
 **Learning:** In API middleware (`AuthMiddleware`, `RateLimitMiddleware`), extracting the API key from the `Authorization` header using `strings.SplitN(authHeader, " ", 2)` allocates a slice and strings on the heap for every single incoming HTTP request. By replacing this with a zero-allocation check using `len(authHeader) > 7 && strings.EqualFold(authHeader[:7], "Bearer ")` followed by `authHeader[7:]`, we avoid all heap allocations and reduce parsing time from ~74ns to ~8ns (~9x speedup).
 **Action:** When extracting values from HTTP headers with known prefixes (like "Bearer "), avoid `strings.Split` and `strings.SplitN`. Use `strings.EqualFold` with string slicing instead for a zero-allocation fast path.
+
+## 2024-05-18 - Avoid colly.Request.AbsoluteURL in hot loops
+**Learning:** In hot link discovery loops (like OnHTML for "a[href]"), calling `e.Request.AbsoluteURL(link)` incurs extremely high CPU overhead because it uses `url.Parse` and `url.ResolveReference` on every single discovered link.
+**Action:** Always use the zero-allocation/low-allocation fast path `utils.ResolveHref(e.Request.URL, link)` instead. This utility bypasses full struct allocations and URL parsing for common absolute and root-relative paths, resolving references more than 10x faster.

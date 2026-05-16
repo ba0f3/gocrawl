@@ -222,7 +222,7 @@ func (s *MCPServer) performCrawl(ctx context.Context, job *CrawlJob, maxDepth, m
 		}
 
 		link := e.Attr("href")
-		absURL := e.Request.AbsoluteURL(link)
+		absURL := utils.ResolveHref(e.Request.URL, link)
 
 		// ⚡ Bolt Optimization: Pre-check visited map and page limits before parsing new URL
 		crawlMu.Lock()
