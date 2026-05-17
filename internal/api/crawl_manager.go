@@ -385,7 +385,29 @@ func (cm *CrawlManager) shouldScrapeURL(absURL string, baseURL *url.URL, expecte
 		return true
 	}
 
-	// For path extraction when regex is needed, fallback to url.Parse for safety (unescaping, etc.)
+	// ⚡ Bolt Optimization: Fast-path for path extraction without url.Parse allocation
+	// If there are no URL-encoded characters (%), we can safely slice the path directly.
+	if strings.IndexByte(absURL, '%') == -1 {
+		pathStart := len(expectedOrigin)
+		pathEnd := len(absURL)
+		idx := strings.IndexAny(absURL[pathStart:], "?#")
+		if idx != -1 {
+			pathEnd = pathStart + idx
+		}
+		path := absURL[pathStart:pathEnd]
+		if path == "" {
+			path = "/"
+		}
+		if includeRe != nil && !includeRe.MatchString(path) {
+			return false
+		}
+		if excludeRe != nil && excludeRe.MatchString(path) {
+			return false
+		}
+		return true
+	}
+
+	// For path extraction when regex is needed and URL might be encoded, fallback to url.Parse for safety
 	parsedURL, err := url.Parse(absURL)
 	if err != nil {
 		return false
