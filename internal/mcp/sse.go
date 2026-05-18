@@ -150,14 +150,20 @@ func (m *SSEManager) handleBroadcasts() {
 
 // FormatSSEMessage formats an event for SSE transmission
 func FormatSSEMessage(event SSEEvent) (string, error) {
-	data, err := json.Marshal(map[string]interface{}{
-		"type":      event.Type,
-		"data":      event.Data,
-		"timestamp": event.Timestamp.Format(time.RFC3339),
+	// ⚡ Bolt Optimization: Use anonymous struct instead of map[string]interface{}
+	// to avoid heap allocations and reflection overhead during json.Marshal
+	data, err := json.Marshal(struct {
+		Type      string      `json:"type"`
+		Data      interface{} `json:"data"`
+		Timestamp string      `json:"timestamp"`
+	}{
+		Type:      event.Type,
+		Data:      event.Data,
+		Timestamp: event.Timestamp.Format(time.RFC3339),
 	})
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf("data: %s\n\n", string(data)), nil
+	return "data: " + string(data) + "\n\n", nil
 }
