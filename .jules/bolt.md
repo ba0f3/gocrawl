@@ -238,4 +238,4 @@ Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) 
 
 ## 2026-05-19 - Zero-Allocation Payload Struct in JSON Marshal (`internal/mcp/sse.go`)
 **Learning:** In the `FormatSSEMessage` method, dynamically initializing a `map[string]interface{}` just to immediately pass it to `json.Marshal` incurs high heap allocation costs and causes reflection overhead.
-**Action:** Replace dynamic map initialization with an anonymous struct literal before passing to `json.Marshal`. The static struct avoids unnecessary reflection over arbitrary string keys during serialization and completely drops allocation overhead, halving the function's execution time and drastically reducing allocations from 21 down to 9.
+**Action:** Replace dynamic map initialization with an anonymous struct literal before passing to `json.Marshal`. The static struct avoids unnecessary reflection over arbitrary string keys during serialization and significantly reduces allocation overhead, halving the function's execution time and drastically reducing allocations from 21 down to 9.

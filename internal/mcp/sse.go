@@ -155,11 +155,11 @@ func FormatSSEMessage(event SSEEvent) (string, error) {
 	data, err := json.Marshal(struct {
 		Type      string      `json:"type"`
 		Data      interface{} `json:"data"`
-		Timestamp string      `json:"timestamp"`
+		Timestamp time.Time   `json:"timestamp"`
 	}{
 		Type:      event.Type,
 		Data:      event.Data,
-		Timestamp: event.Timestamp.Format(time.RFC3339),
+		Timestamp: event.Timestamp,
 	})
 	if err != nil {
 		return "", err
