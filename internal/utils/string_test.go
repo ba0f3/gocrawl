@@ -1,25 +1,113 @@
 package utils
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestHasAnyLowercasePattern(t *testing.T) {
 	tests := []struct {
+		name     string
 		s        string
 		patterns []string
-		expected bool
+		want     bool
 	}{
-		{"", []string{"test"}, false},
-		{"hello", []string{}, false},
-		{"Hello World", []string{"world"}, true},
-		{"Hello World", []string{"hello"}, true},
-		{"Hello World", []string{"xyz", "lo w"}, true},
-		{"Hello World", []string{"WORLD"}, false},
+		{
+			name:     "empty string",
+			s:        "",
+			patterns: []string{"test"},
+			want:     false,
+		},
+		{
+			name:     "no patterns",
+			s:        "test string",
+			patterns: []string{},
+			want:     false,
+		},
+		{
+			name:     "pattern larger than string",
+			s:        "test",
+			patterns: []string{"test string"},
+			want:     false,
+		},
+		{
+			name:     "exact match",
+			s:        "test",
+			patterns: []string{"test"},
+			want:     true,
+		},
+		{
+			name:     "exact match case insensitive",
+			s:        "TeSt",
+			patterns: []string{"test"},
+			want:     true,
+		},
+		{
+			name:     "substring match",
+			s:        "this is a test string",
+			patterns: []string{"test"},
+			want:     true,
+		},
+		{
+			name:     "substring match case insensitive",
+			s:        "this is a TeSt string",
+			patterns: []string{"test"},
+			want:     true,
+		},
+		{
+			name:     "multiple patterns, first matches",
+			s:        "test string",
+			patterns: []string{"test", "other"},
+			want:     true,
+		},
+		{
+			name:     "multiple patterns, last matches",
+			s:        "test string",
+			patterns: []string{"other", "string"},
+			want:     true,
+		},
+		{
+			name:     "multiple patterns, no match",
+			s:        "test string",
+			patterns: []string{"other", "value"},
+			want:     false,
+		},
+		{
+			name:     "one character pattern",
+			s:        "a test string",
+			patterns: []string{"a"},
+			want:     true,
+		},
+		{
+			name:     "one character pattern, no match",
+			s:        "test string",
+			patterns: []string{"z"},
+			want:     false,
+		},
+		{
+			name:     "one character pattern uppercase in string",
+			s:        "A test string",
+			patterns: []string{"a"},
+			want:     true,
+		},
+		{
+			name:     "two character pattern",
+			s:        "test string",
+			patterns: []string{"te"},
+			want:     true,
+		},
+		{
+		    name:     "empty pattern",
+		    s:        "test string",
+		    patterns: []string{""},
+		    want:     false,
+		},
 	}
 
-	for i, tt := range tests {
-		result := HasAnyLowercasePattern(tt.s, tt.patterns)
-		if result != tt.expected {
-			t.Errorf("Test %d failed: expected %v, got %v for string %q and patterns %v", i, tt.expected, result, tt.s, tt.patterns)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := HasAnyLowercasePattern(tt.s, tt.patterns); got != tt.want {
+				t.Errorf("HasAnyLowercasePattern() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
