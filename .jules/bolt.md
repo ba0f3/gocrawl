@@ -239,3 +239,7 @@ Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) 
 ## 2026-05-19 - Zero-Allocation Payload Struct in JSON Marshal (`internal/mcp/sse.go`)
 **Learning:** In the `FormatSSEMessage` method, dynamically initializing a `map[string]interface{}` just to immediately pass it to `json.Marshal` incurs high heap allocation costs and causes reflection overhead.
 **Action:** Replace dynamic map initialization with an anonymous struct literal before passing to `json.Marshal`. The static struct avoids unnecessary reflection over arbitrary string keys during serialization and significantly reduces allocation overhead, halving the function's execution time and drastically reducing allocations from 21 down to 9.
+
+## 2026-05-20 - Unrolling character checks for massive speedups in hot loops
+**Learning:** In hot loops mapping over string data, avoiding loop setup and branch evaluations can yield huge performance gains. Manual loop unrolling for first 1-2 character checks in string matching algorithms like `HasAnyLowercasePattern` significantly improved performance in benchmarks (by about 40%). It is important to also protect against panics by carefully validating array bounds, specifically when the given patterns to match might have 0 length.
+**Action:** When working on custom string matching functions used inside high-frequency operations, unroll the first 1-2 characters check before evaluating further characters. Keep array bounds checking top of mind for edge cases.
