@@ -68,8 +68,8 @@ func writeJSON(c *gin.Context, statusCode int, data interface{}, err error) {
 
 func (h *Handler) Register(c *gin.Context) {
 	var creds struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username string `json:"username" binding:"required,max=64"`
+		Password string `json:"password" binding:"required,max=72"`
 	}
 	if err := c.ShouldBindJSON(&creds); err != nil {
 		writeJSON(c, http.StatusBadRequest, nil, err)
@@ -87,8 +87,8 @@ func (h *Handler) Register(c *gin.Context) {
 
 func (h *Handler) Login(c *gin.Context) {
 	var creds struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username string `json:"username" binding:"required,max=64"`
+		Password string `json:"password" binding:"required,max=72"`
 	}
 	if err := c.ShouldBindJSON(&creds); err != nil {
 		writeJSON(c, http.StatusBadRequest, nil, err)
