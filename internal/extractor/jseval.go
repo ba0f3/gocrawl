@@ -359,10 +359,16 @@ func filterReadable(s string) string {
 	if strings.HasPrefix(s, "/") || strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") {
 		return ""
 	}
-	if strings.Contains(s, "{") && strings.Contains(s, "}") && (strings.Contains(s, ":") || strings.Contains(s, ";")) {
+	// ⚡ Bolt Optimization: Use IndexByte instead of Contains for faster rejection.
+	if strings.IndexByte(s, '{') >= 0 && strings.IndexByte(s, '}') >= 0 && (strings.IndexByte(s, ':') >= 0 || strings.IndexByte(s, ';') >= 0) {
 		return ""
 	}
-	if strings.Count(s, "<") > 3 && strings.Count(s, ">") > 3 {
+
+	hasLeftAngle := strings.IndexByte(s, '<') >= 0
+	hasRightAngle := strings.IndexByte(s, '>') >= 0
+	hasHTMLTags := hasLeftAngle && hasRightAngle
+
+	if hasHTMLTags && strings.Count(s, "<") > 3 && strings.Count(s, ">") > 3 {
 		stripped := htmlTagRe.ReplaceAllString(s, "")
 		if len(strings.TrimSpace(stripped)) < 15 {
 			return ""
@@ -388,11 +394,18 @@ func filterReadable(s string) string {
 	if !hasSeparator {
 		return ""
 	}
-	clean := strings.TrimSpace(htmlTagRe.ReplaceAllString(s, ""))
-	if len(clean) <= 15 {
-		return ""
+
+	// ⚡ Bolt Optimization: Skip regex replace if there are no HTML tags, avoiding unnecessary allocation.
+	if hasHTMLTags {
+		clean := strings.TrimSpace(htmlTagRe.ReplaceAllString(s, ""))
+		if len(clean) <= 15 {
+			return ""
+		}
+		return clean
 	}
-	return clean
+
+	// s is already trimmed at the start of the function and length checked.
+	return s
 }
 
 func extractNextFText(rawJSON string) []string {
