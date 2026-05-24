@@ -16,11 +16,9 @@ import (
 	"gocrawl/internal/db"
 	"gocrawl/internal/utils"
 
-	"github.com/andybalholm/cascadia"
 	"github.com/gocolly/colly/v2"
+	"golang.org/x/net/html"
 )
-
-var articleMatcher = cascadia.MustCompile("article, main, [role=main], .post, .entry-content, .entry-title")
 
 // CrawlManager drains queued crawl jobs with a worker pool.
 type CrawlManager struct {
@@ -150,15 +148,47 @@ func (cm *CrawlManager) updateCrawlTotal(jobID string, total int) {
 	})
 }
 
+// isArticleClass checks if a class string contains common article/main tokens.
+// ⚡ Bolt Optimization: zero-allocation token scanning.
+func isArticleClass(class string) bool {
+	start := 0
+	l := len(class)
+	for i := 0; i <= l; i++ {
+		if i == l || class[i] == ' ' || class[i] == '\t' || class[i] == '\n' || class[i] == '\r' {
+			if i > start {
+				tok := class[start:i]
+				if tok == "post" || tok == "entry-content" || tok == "entry-title" {
+					return true
+				}
+			}
+			start = i + 1
+		}
+	}
+	return false
+}
+
 // linkInArticleOrMain is true when the anchor sits under common article/main containers.
 func linkInArticleOrMain(e *colly.HTMLElement) bool {
-	// ⚡ Bolt Optimization: Use a pre-compiled single cascadia matcher and manually traverse
-	// the HTML tree up to the root. Using goquery's ParentsFiltered in a loop was causing
-	// redundant parsing and memory overhead inside the hot loop.
+	// ⚡ Bolt Optimization: Manually traverse x/net/html nodes and attributes
+	// instead of using cascadia/goquery matchers inside the hot loop. This avoids
+	// complex parsing overhead and large struct allocations.
 	for _, n := range e.DOM.Nodes {
 		for p := n.Parent; p != nil; p = p.Parent {
-			if articleMatcher.Match(p) {
+			if p.Type != html.ElementNode {
+				continue
+			}
+			if p.Data == "article" || p.Data == "main" {
 				return true
+			}
+			for _, attr := range p.Attr {
+				if attr.Key == "role" && attr.Val == "main" {
+					return true
+				}
+				if attr.Key == "class" {
+					if isArticleClass(attr.Val) {
+						return true
+					}
+				}
 			}
 		}
 	}
