@@ -181,7 +181,7 @@ func linkInArticleOrMain(e *colly.HTMLElement) bool {
 				return true
 			}
 			for _, attr := range p.Attr {
-				if attr.Key == "role" && attr.Val == "main" {
+				if attr.Key == "role" && strings.EqualFold(attr.Val, "main") {
 					return true
 				}
 				if attr.Key == "class" {
