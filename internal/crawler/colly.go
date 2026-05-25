@@ -17,6 +17,7 @@ import (
 	"gocrawl/internal/utils"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 	"github.com/gocolly/colly/v2"
 	"github.com/gocolly/colly/v2/debug"
 	"github.com/gocolly/colly/v2/proxy"
@@ -182,12 +183,32 @@ func buildResultFromMainHTMLWithDoc(contentHTML string, req *ScrapeRequest, full
 		baseURL, _ := url.Parse(req.URL)
 		if linkSelExplicit(req) {
 			doc.Find(strings.TrimSpace(req.LinkSelector)).Each(func(_ int, s *goquery.Selection) {
-				appendResolvedHref(s, baseURL, &result.Links, seen)
+					if href, ok := s.Attr("href"); ok {
+						appendResolvedHref(href, baseURL, &result.Links, seen)
+					}
 			})
 		} else {
-			root.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
-				appendResolvedHref(s, baseURL, &result.Links, seen)
-			})
+				// ⚡ Bolt Optimization: Manually traverse x/net/html tree
+				// to avoid goquery.Find multi-selector allocation overhead.
+				var walk func(*html.Node)
+				walk = func(n *html.Node) {
+					if n.Type == html.ElementNode && n.Data == "a" {
+						for _, a := range n.Attr {
+							if a.Key == "href" {
+								appendResolvedHref(a.Val, baseURL, &result.Links, seen)
+								break
+							}
+						}
+					}
+					for c := n.FirstChild; c != nil; c = c.NextSibling {
+						walk(c)
+					}
+				}
+				if root.Length() > 0 {
+					for _, n := range root.Nodes {
+						walk(n)
+					}
+				}
 		}
 	}
 	if wantsFormat(req, "markdown") {
@@ -242,8 +263,7 @@ func pickContentHTML(e *colly.HTMLElement, req *ScrapeRequest) (contentHTML stri
 	return contentHTML, body
 }
 
-func appendResolvedHref(s *goquery.Selection, baseURL *url.URL, links *[]string, seen map[string]struct{}) {
-	href, _ := s.Attr("href")
+func appendResolvedHref(href string, baseURL *url.URL, links *[]string, seen map[string]struct{}) {
 	if href == "" || baseURL == nil {
 		return
 	}
@@ -267,14 +287,32 @@ func collectScrapeLinks(e *colly.HTMLElement, req *ScrapeRequest, scope *goquery
 	baseURL, _ := url.Parse(req.URL)
 	if linkSelExplicit(req) {
 		e.DOM.Find(strings.TrimSpace(req.LinkSelector)).Each(func(_ int, s *goquery.Selection) {
-			appendResolvedHref(s, baseURL, links, seen)
+			if href, ok := s.Attr("href"); ok {
+				appendResolvedHref(href, baseURL, links, seen)
+			}
 		})
 		return
 	}
 	if scope != nil && scope.Length() > 0 {
-		scope.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
-			appendResolvedHref(s, baseURL, links, seen)
-		})
+		// ⚡ Bolt Optimization: Manually traverse x/net/html tree
+		// to avoid goquery.Find multi-selector allocation overhead.
+		var walk func(*html.Node)
+		walk = func(n *html.Node) {
+			if n.Type == html.ElementNode && n.Data == "a" {
+				for _, a := range n.Attr {
+					if a.Key == "href" {
+						appendResolvedHref(a.Val, baseURL, links, seen)
+						break
+					}
+				}
+			}
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				walk(c)
+			}
+		}
+		for _, n := range scope.Nodes {
+			walk(n)
+		}
 	}
 }
 
