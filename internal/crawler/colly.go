@@ -188,27 +188,11 @@ func buildResultFromMainHTMLWithDoc(contentHTML string, req *ScrapeRequest, full
 					}
 			})
 		} else {
-				// ⚡ Bolt Optimization: Manually traverse x/net/html tree
-				// to avoid goquery.Find multi-selector allocation overhead.
-				var walk func(*html.Node)
-				walk = func(n *html.Node) {
-					if n.Type == html.ElementNode && n.Data == "a" {
-						for _, a := range n.Attr {
-							if a.Key == "href" {
-								appendResolvedHref(a.Val, baseURL, &result.Links, seen)
-								break
-							}
-						}
-					}
-					for c := n.FirstChild; c != nil; c = c.NextSibling {
-						walk(c)
-					}
-				}
-				if root.Length() > 0 {
-					for _, n := range root.Nodes {
-						walk(n)
-					}
-				}
+			// ⚡ Bolt Optimization: Manually traverse x/net/html tree
+			// to avoid goquery.Find multi-selector allocation overhead.
+			if root.Length() > 0 {
+				traverseAndCollectAnchors(root.Nodes, baseURL, &result.Links, seen)
+			}
 		}
 	}
 	if wantsFormat(req, "markdown") {
@@ -282,6 +266,26 @@ func appendResolvedHref(href string, baseURL *url.URL, links *[]string, seen map
 	*links = append(*links, abs)
 }
 
+func traverseAndCollectAnchors(nodes []*html.Node, baseURL *url.URL, links *[]string, seen map[string]struct{}) {
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "a" {
+			for _, a := range n.Attr {
+				if a.Key == "href" {
+					appendResolvedHref(a.Val, baseURL, links, seen)
+					break
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	for _, n := range nodes {
+		walk(n)
+	}
+}
+
 func collectScrapeLinks(e *colly.HTMLElement, req *ScrapeRequest, scope *goquery.Selection, links *[]string) {
 	seen := make(map[string]struct{})
 	baseURL, _ := url.Parse(req.URL)
@@ -296,23 +300,7 @@ func collectScrapeLinks(e *colly.HTMLElement, req *ScrapeRequest, scope *goquery
 	if scope != nil && scope.Length() > 0 {
 		// ⚡ Bolt Optimization: Manually traverse x/net/html tree
 		// to avoid goquery.Find multi-selector allocation overhead.
-		var walk func(*html.Node)
-		walk = func(n *html.Node) {
-			if n.Type == html.ElementNode && n.Data == "a" {
-				for _, a := range n.Attr {
-					if a.Key == "href" {
-						appendResolvedHref(a.Val, baseURL, links, seen)
-						break
-					}
-				}
-			}
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				walk(c)
-			}
-		}
-		for _, n := range scope.Nodes {
-			walk(n)
-		}
+		traverseAndCollectAnchors(scope.Nodes, baseURL, links, seen)
 	}
 }
 
