@@ -14,6 +14,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/dop251/goja"
+	"golang.org/x/net/html"
 )
 
 const jsevalSetup = `
@@ -142,38 +143,76 @@ type JsDataBlob struct {
 }
 
 // ExtractJsDataFromHTML runs inline scripts in a goja sandbox and collects window.__* JSON blobs.
-func ExtractJsDataFromHTML(html string) []JsDataBlob {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+func ExtractJsDataFromHTML(htmlStr string) []JsDataBlob {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
 		return nil
 	}
 	var scripts []string
-	doc.Find("script").Each(func(_ int, s *goquery.Selection) {
-		if src, _ := s.Attr("src"); src != "" {
-			return
-		}
-		t, _ := s.Attr("type")
 
-		// ⚡ Bolt Optimization: Use zero-allocation EqualFold instead of strings.ToLower
-		tTrim := strings.TrimSpace(t)
-		isClassic := tTrim == "" ||
-			strings.EqualFold(tTrim, "text/javascript") ||
-			strings.EqualFold(tTrim, "application/javascript") ||
-			strings.EqualFold(tTrim, "text/ecmascript") ||
-			strings.EqualFold(tTrim, "application/ecmascript")
+	// ⚡ Bolt Optimization: Manually traverse x/net/html tree
+	// to avoid goquery.Find("script") selector and struct allocation overhead.
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "script" {
+			var src, t string
+			for _, attr := range n.Attr {
+				if attr.Key == "src" {
+					src = attr.Val
+				} else if attr.Key == "type" {
+					t = attr.Val
+				}
+			}
+			if src != "" {
+				goto next
+			}
 
-		if !isClassic {
-			return
+			{
+				// ⚡ Bolt Optimization: Use zero-allocation EqualFold instead of strings.ToLower
+				tTrim := strings.TrimSpace(t)
+				isClassic := tTrim == "" ||
+					strings.EqualFold(tTrim, "text/javascript") ||
+					strings.EqualFold(tTrim, "application/javascript") ||
+					strings.EqualFold(tTrim, "text/ecmascript") ||
+					strings.EqualFold(tTrim, "application/ecmascript")
+
+				if !isClassic {
+					goto next
+				}
+
+				// Extract script text from children
+				var sb strings.Builder
+				var extractText func(*html.Node)
+				extractText = func(node *html.Node) {
+					if node.Type == html.TextNode {
+						sb.WriteString(node.Data)
+					}
+					for c := node.FirstChild; c != nil; c = c.NextSibling {
+						extractText(c)
+					}
+				}
+				extractText(n)
+
+				txt := strings.TrimSpace(sb.String())
+				if txt == "" {
+					goto next
+				}
+				if len(txt) > 2<<20 {
+					goto next
+				}
+				scripts = append(scripts, txt)
+			}
 		}
-		txt := strings.TrimSpace(s.Text())
-		if txt == "" {
-			return
+	next:
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
 		}
-		if len(txt) > 2<<20 {
-			return
-		}
-		scripts = append(scripts, txt)
-	})
+	}
+
+	for _, n := range doc.Nodes {
+		walk(n)
+	}
+
 	if len(scripts) == 0 {
 		return nil
 	}
