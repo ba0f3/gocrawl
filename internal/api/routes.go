@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -307,7 +308,8 @@ func (h *Handler) SSEScrape(c *gin.Context) {
 	req := c.Request
 	go func() {
 		var scrapeReq crawler.ScrapeRequest
-		if err := json.NewDecoder(req.Body).Decode(&scrapeReq); err != nil {
+		limitedBody := io.LimitReader(req.Body, 1<<20) // 1MB limit to prevent DoS
+		if err := json.NewDecoder(limitedBody).Decode(&scrapeReq); err != nil {
 			log.Printf("Error decoding request: %v", utils.SanitizeForLog(err.Error()))
 			sseClient.Events <- mcp.SSEEvent{Type: "error", Data: map[string]interface{}{"message": "Invalid request body"}}
 			sseClient.Done <- true

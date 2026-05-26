@@ -40,3 +40,8 @@
 **Vulnerability:** Unbounded username and password lengths in authentication endpoints.
 **Learning:** bcrypt is highly sensitive to long inputs, and parsing unbounded JSON strings can cause memory exhaustion. Gin's ShouldBindJSON handles constraints automatically.
 **Prevention:** Always add maximum length constraints (e.g. max=72 for bcrypt) to user input binding structs.
+
+## 2026-05-26 - Missing JSON Request Body Limits
+**Vulnerability:** DoS risk via unbound JSON request bodies in HTTP streaming (SSE) endpoints.
+**Learning:** Directly passing unbounded `http.Request.Body` streams into `json.NewDecoder` reads data into memory without an upper limit, leaving the application vulnerable to Denial of Service via massive payload ingestion, especially since standard HTTP middlewares don't restrict stream bodies dynamically.
+**Prevention:** Always wrap `http.Request.Body` with `io.LimitReader(req.Body, MaxBytes)` before passing to memory-allocating parsers like `json.NewDecoder`.
