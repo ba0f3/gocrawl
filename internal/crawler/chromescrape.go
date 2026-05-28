@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gocrawl/internal/config"
+	"gocrawl/internal/utils"
 
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/chromedp"
@@ -35,7 +36,12 @@ func fetchWebSocketDebuggerURL(ctx context.Context, httpBase string) (string, er
 	if err != nil {
 		return "", err
 	}
-	resp, err := http.DefaultClient.Do(req)
+
+	client := &http.Client{
+		Transport: utils.SafeTransport(),
+		Timeout:   10 * time.Second,
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
