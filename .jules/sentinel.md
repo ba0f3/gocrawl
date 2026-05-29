@@ -45,3 +45,8 @@
 **Vulnerability:** DoS risk via unbound JSON request bodies in HTTP streaming (SSE) endpoints.
 **Learning:** Directly passing unbounded `http.Request.Body` streams into `json.NewDecoder` reads data into memory without an upper limit, leaving the application vulnerable to Denial of Service via massive payload ingestion, especially since standard HTTP middlewares don't restrict stream bodies dynamically.
 **Prevention:** Always wrap `http.Request.Body` with `io.LimitReader(req.Body, MaxBytes)` before passing to memory-allocating parsers like `json.NewDecoder`.
+
+## 2026-06-03 - Missing SSRF Protection in Chrome CDP Configuration Fetching
+**Vulnerability:** External HTTP client in the `chromescrape` fetchWebSocketDebuggerURL function was vulnerable to SSRF.
+**Learning:** `http.DefaultClient` was used to fetch the CDP configuration via an HTTP GET to a remote base URL. This lacked both timeout and SSRF protection.
+**Prevention:** Apply `utils.SafeTransport()` to all outgoing HTTP calls.
