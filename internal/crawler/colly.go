@@ -443,13 +443,67 @@ func populateScrapeResultFromBody(e *colly.HTMLElement, req *ScrapeRequest, resu
 		}
 	}
 
-	title, desc, lang := extractMetadataFast(e.DOM.Nodes)
+	// Bolt Optimization: Manually traverse x/net/html nodes for metadata extraction
+	// and stop at <body>, avoiding heavy allocation overhead from goquery multi-selectors.
+	var title, description, lang string
+	if e.DOM != nil {
+		for _, n := range e.DOM.Nodes {
+			extractMetadataFast(n, &title, &description, &lang)
+		}
+	}
+
 	result.Metadata["title"] = title
-	result.Metadata["description"] = desc
+	result.Metadata["description"] = description
 	result.Metadata["language"] = lang
 	result.Metadata["sourceURL"] = req.URL
 	if e.Response != nil {
 		applyJsExtract(req, e.Response.Body, result)
+	}
+}
+
+func extractMetadataFast(n *html.Node, title, desc, lang *string) {
+	if n.Type == html.ElementNode {
+		if n.Data == "body" {
+			return // Skip scanning body subtree since metadata is in head
+		}
+		if n.Data == "html" {
+			for _, a := range n.Attr {
+				if a.Key == "lang" {
+					*lang = a.Val
+					break
+				}
+			}
+		} else if n.Data == "title" {
+			var sb strings.Builder
+			extractTextNode(n, &sb)
+			// Append title text like goquery multi-selector does.
+			*title += sb.String()
+		} else if n.Data == "meta" {
+			isDesc := false
+			content := ""
+			for _, a := range n.Attr {
+				if a.Key == "name" && a.Val == "description" { // case-sensitive matching for parity with goquery
+					isDesc = true
+				} else if a.Key == "content" {
+					content = a.Val
+				}
+			}
+			if isDesc {
+				*desc = content
+			}
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		extractMetadataFast(c, title, desc, lang)
+	}
+}
+
+func extractTextNode(n *html.Node, sb *strings.Builder) {
+	if n.Type == html.TextNode {
+		sb.WriteString(n.Data)
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		extractTextNode(c, sb)
 	}
 }
 
@@ -465,62 +519,4 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
-}
-
-// extractMetadataFast manually traverses the x/net/html tree to extract metadata
-// without allocating goquery Selection objects. It stops traversing when it hits
-// the <body> tag to significantly speed up processing on large documents.
-func extractMetadataFast(nodes []*html.Node) (title, desc, lang string) {
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if title != "" && desc != "" && lang != "" {
-			return
-		}
-		if n.Type == html.ElementNode {
-			if n.Data == "body" {
-				return
-			}
-			if title == "" && n.Data == "title" {
-				var buf strings.Builder
-				var extractText func(*html.Node)
-				extractText = func(nn *html.Node) {
-					if nn.Type == html.TextNode {
-						buf.WriteString(nn.Data)
-					}
-					for c := nn.FirstChild; c != nil; c = c.NextSibling {
-						extractText(c)
-					}
-				}
-				extractText(n)
-				title = buf.String()
-			} else if desc == "" && n.Data == "meta" {
-				var isDesc bool
-				var content string
-				for _, a := range n.Attr {
-					if a.Key == "name" && strings.EqualFold(a.Val, "description") {
-						isDesc = true
-					} else if a.Key == "content" {
-						content = a.Val
-					}
-				}
-				if isDesc {
-					desc = content
-				}
-			} else if lang == "" && n.Data == "html" {
-				for _, a := range n.Attr {
-					if a.Key == "lang" {
-						lang = a.Val
-						break
-					}
-				}
-			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-	}
-	for _, n := range nodes {
-		walk(n)
-	}
-	return title, desc, lang
 }

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"gocrawl/internal/config"
-	"gocrawl/internal/utils"
 
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/chromedp"
@@ -36,11 +35,7 @@ func fetchWebSocketDebuggerURL(ctx context.Context, httpBase string) (string, er
 	if err != nil {
 		return "", err
 	}
-	client := &http.Client{
-		Transport: utils.SafeTransport(),
-		Timeout:   10 * time.Second,
-	}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -50,7 +45,7 @@ func fetchWebSocketDebuggerURL(ctx context.Context, httpBase string) (string, er
 		return "", fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var v devtoolsVersion
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&v); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
 		return "", err
 	}
 	ws := strings.TrimSpace(v.WebSocketDebuggerURL)
