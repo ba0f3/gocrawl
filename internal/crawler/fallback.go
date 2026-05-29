@@ -6,9 +6,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/PuerkitoBio/goquery"
 	isantibot "github.com/ba0f3/is-antibot-go"
 	"gocrawl/internal/utils"
-	"golang.org/x/net/html"
 )
 
 const chromedpHTMLScanMax = 256 * 1024
@@ -199,102 +199,46 @@ func hasUICSRFrameworkMarker(sample string) bool {
 
 // detectCSRFrameworkOrSPAShell returns a metadata tag and true when the HTML looks like a UI-framework CSR shell
 // (React, Next.js, Vue, Nuxt, Angular, SvelteKit, Remix, Astro, Vite, etc.).
-func detectCSRFrameworkOrSPAShell(htmlStr string) (tag string, ok bool) {
-	if htmlStr == "" {
+func detectCSRFrameworkOrSPAShell(html string) (tag string, ok bool) {
+	if html == "" {
 		return "", false
 	}
-	doc, err := html.Parse(strings.NewReader(htmlStr))
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
 		return "", false
 	}
-
-	var rootNode *html.Node
-	var bodyNode *html.Node
-
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode {
-			if n.Data == "body" {
-				bodyNode = n
-			}
-			if rootNode == nil {
-				for _, attr := range n.Attr {
-					if attr.Key == "id" && (attr.Val == "root" || attr.Val == "__next" || attr.Val == "__nuxt" || attr.Val == "app") {
-						rootNode = n
-					} else if attr.Key == "data-reactroot" || attr.Key == "data-ng-app" || attr.Key == "ng-version" {
-						rootNode = n
-					}
-				}
-			}
+	for _, sel := range []string{
+		"#root", "#__next", "#__nuxt", "#app",
+		"[data-reactroot]", "[data-ng-app]", "[ng-version]",
+	} {
+		n := doc.Find(sel).First()
+		if n.Length() == 0 {
+			continue
 		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-	}
-	walk(doc)
-
-	if rootNode != nil {
-		var textRunes int
-		var innerHTMLBytes int
-
-		var walkChildren func(*html.Node)
-		walkChildren = func(n *html.Node) {
-			if n.Type == html.TextNode {
-				textRunes += utf8.RuneCountInString(strings.TrimSpace(n.Data))
-				innerHTMLBytes += len(n.Data)
-			} else if n.Type == html.ElementNode {
-				// Estimate tag length to approximate innerHTML size without rendering
-				innerHTMLBytes += len(n.Data) * 2 + 5 // <tag></tag>
-				for _, a := range n.Attr {
-					innerHTMLBytes += len(a.Key) + len(a.Val) + 4 //  key="val"
-				}
-			} else if n.Type == html.CommentNode {
-				innerHTMLBytes += len(n.Data) + 7 // <!-- -->
-			}
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				walkChildren(c)
-			}
-		}
-
-		for c := rootNode.FirstChild; c != nil; c = c.NextSibling {
-			walkChildren(c)
-		}
-
-		if textRunes <= spaMountMaxTextRunes && innerHTMLBytes >= spaMountMinInnerHTML {
+		inner, _ := n.Html()
+		text := strings.TrimSpace(n.Text())
+		tr := utf8.RuneCountInString(text)
+		if tr <= spaMountMaxTextRunes && len(inner) >= spaMountMinInnerHTML {
 			return "spa_shell", true
 		}
 	}
-
-	sample := htmlStr
-	if len(htmlStr) > chromedpHTMLScanMax {
-		sample = htmlStr[:chromedpHTMLScanMax]
+	sample := html
+	if len(html) > chromedpHTMLScanMax {
+		sample = html[:chromedpHTMLScanMax]
 	}
 	if !hasUICSRFrameworkMarker(sample) {
 		return "", false
 	}
-
-	if bodyNode == nil {
-		if len(htmlStr) >= spaFrameworkMinDocBytes {
+	body := doc.Find("body").First()
+	if body.Length() == 0 {
+		if len(html) >= spaFrameworkMinDocBytes {
 			return "csr_framework", true
 		}
 		return "", false
 	}
-
-	var bodyTextRunes int
-	var walkBodyText func(*html.Node)
-	walkBodyText = func(n *html.Node) {
-		if n.Type == html.TextNode {
-			bodyTextRunes += utf8.RuneCountInString(strings.TrimSpace(n.Data))
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walkBodyText(c)
-		}
-	}
-	walkBodyText(bodyNode)
-
-	if bodyTextRunes < spaFrameworkBodyMaxText && len(htmlStr) >= spaFrameworkMinDocBytes {
+	bt := utf8.RuneCountInString(strings.TrimSpace(body.Text()))
+	if bt < spaFrameworkBodyMaxText && len(html) >= spaFrameworkMinDocBytes {
 		return "csr_framework", true
 	}
-
 	return "", false
 }
