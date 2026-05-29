@@ -36,7 +36,6 @@ func fetchWebSocketDebuggerURL(ctx context.Context, httpBase string) (string, er
 	if err != nil {
 		return "", err
 	}
-
 	client := &http.Client{
 		Transport: utils.SafeTransport(),
 		Timeout:   10 * time.Second,
@@ -51,7 +50,7 @@ func fetchWebSocketDebuggerURL(ctx context.Context, httpBase string) (string, er
 		return "", fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var v devtoolsVersion
-	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&v); err != nil {
 		return "", err
 	}
 	ws := strings.TrimSpace(v.WebSocketDebuggerURL)
