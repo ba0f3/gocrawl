@@ -15,16 +15,18 @@ var ErrJobNotFound = errors.New("job not found")
 
 // MemoryStore holds users unsupported (auth off) but implements crawl jobs and results in RAM.
 type MemoryStore struct {
-	mu    sync.Mutex
-	jobs  map[string]*CrawlJob
-	byJob map[string][]*CrawlResult
+	mu     sync.Mutex
+	jobs   map[string]*CrawlJob
+	byJob  map[string][]*CrawlResult
+	queued []string
 }
 
 // NewMemoryStore is used when ENABLE_AUTH=false so crawl queue and status work without Mongo/SQL.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		jobs:  make(map[string]*CrawlJob),
-		byJob: make(map[string][]*CrawlResult),
+		jobs:   make(map[string]*CrawlJob),
+		byJob:  make(map[string][]*CrawlResult),
+		queued: make([]string, 0),
 	}
 }
 
@@ -51,6 +53,9 @@ func (m *MemoryStore) CreateCrawlJob(job *CrawlJob) error {
 	defer m.mu.Unlock()
 	cpy := *job
 	m.jobs[job.ID] = &cpy
+	if cpy.Status == "queued" {
+		m.queued = append(m.queued, cpy.ID)
+	}
 	return nil
 }
 
@@ -68,11 +73,17 @@ func (m *MemoryStore) GetCrawlJob(id string) (*CrawlJob, error) {
 func (m *MemoryStore) UpdateCrawlJob(job *CrawlJob) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.jobs[job.ID]; !ok {
+	oldJob, ok := m.jobs[job.ID]
+	if !ok {
 		return ErrJobNotFound
 	}
+
 	cpy := *job
 	m.jobs[job.ID] = &cpy
+
+	if oldJob.Status != "queued" && cpy.Status == "queued" {
+		m.queued = append(m.queued, cpy.ID)
+	}
 	return nil
 }
 
@@ -83,31 +94,34 @@ func (m *MemoryStore) UpdateJobProgress(jobID string, status string, completed i
 	if !ok {
 		return ErrJobNotFound
 	}
+
+	oldStatus := j.Status
 	j.Status = status
 	j.Completed = completed
+
+	if oldStatus != "queued" && status == "queued" {
+		m.queued = append(m.queued, jobID)
+	}
 	return nil
 }
 
 func (m *MemoryStore) ClaimNextQueuedJob() (*CrawlJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var pick *CrawlJob
-	for _, j := range m.jobs {
-		if j.Status != "queued" {
-			continue
-		}
-		if pick == nil || j.CreatedAt.Before(pick.CreatedAt) {
-			jj := *j
-			pick = &jj
+
+	// ⚡ Bolt Optimization: O(1) queue for fast job claiming instead of O(N) map traversal
+	for len(m.queued) > 0 {
+		id := m.queued[0]
+		m.queued = m.queued[1:]
+
+		if j, ok := m.jobs[id]; ok && j.Status == "queued" {
+			j.Status = "crawling"
+			cpy := *j
+			return &cpy, nil
 		}
 	}
-	if pick == nil {
-		return nil, nil
-	}
-	j := m.jobs[pick.ID]
-	j.Status = "crawling"
-	cpy := *j
-	return &cpy, nil
+
+	return nil, nil
 }
 
 func (m *MemoryStore) CreateCrawlResult(result *CrawlResult) error {
