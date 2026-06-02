@@ -267,3 +267,7 @@ Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) 
 ## 2024-05-28 - Replace goquery with manual html.Node traversal
 **Learning:** `goquery.Find()` on large HTML strings creates significant GC pressure and overhead due to document parsing, Cascadia selector compilation, and repeated node slice allocations.
 **Action:** When searching for simple root container nodes or specific tags (like detecting SPA shells or CSR frameworks), use manual `html.Node` recursive traversals. This provides O(n) scan times with almost zero allocation, bypassing the heavy overhead of `goquery` in hot paths.
+
+## 2024-05-29 - O(1) Queue for MemoryStore (`internal/db/memory_store.go`)
+**Learning:** In the `MemoryStore` implementation (used for in-memory databases/bypassing auth), the `ClaimNextQueuedJob` method iterated through the entire `m.jobs` map (an `O(N)` operation) on every worker loop to find the oldest "queued" job. In scenarios with thousands of completed/failed jobs, this map traversal became a severe bottleneck. By introducing an explicit `queued []string` slice to act as a FIFO queue, we reduced the claim operation to `O(1)`.
+**Action:** When implementing in-memory job queues or stores that need to fetch the "next" item frequently, do not rely on full map traversals. Maintain an explicit queue (slice or channel) alongside the map to guarantee `O(1)` pop performance. Ensure the queue state is properly maintained during creation and status updates.
