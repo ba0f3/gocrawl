@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -130,7 +129,6 @@ const jsevalDrainTimers = `
 })()
 `
 
-var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
 var errExecutionTimeout = errors.New("execution timeout")
 
 const maxExtractedTextBytes = 256 * 1024
@@ -387,6 +385,28 @@ func walkJSONForText(v interface{}, out *[]string, depth int) {
 	}
 }
 
+// ⚡ Bolt Optimization: Zero-allocation string builder-based approach to strip HTML tags
+// without using regexp.MustCompile(`<[^>]+>`).ReplaceAllString which allocates heavily.
+func stripHTMLTagsStrict(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] == '<' {
+			j := i + 1
+			for j < len(s) && s[j] != '>' {
+				j++
+			}
+			if j < len(s) && j > i+1 { // <[^>]+>
+				i = j + 1
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}
+
 func filterReadable(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) <= 15 {
@@ -408,7 +428,7 @@ func filterReadable(s string) string {
 	hasHTMLTags := hasLeftAngle && hasRightAngle
 
 	if hasHTMLTags && strings.Count(s, "<") > 3 && strings.Count(s, ">") > 3 {
-		stripped := htmlTagRe.ReplaceAllString(s, "")
+		stripped := stripHTMLTagsStrict(s)
 		if len(strings.TrimSpace(stripped)) < 15 {
 			return ""
 		}
@@ -436,7 +456,7 @@ func filterReadable(s string) string {
 
 	// ⚡ Bolt Optimization: Skip regex replace if there are no HTML tags, avoiding unnecessary allocation.
 	if hasHTMLTags {
-		clean := strings.TrimSpace(htmlTagRe.ReplaceAllString(s, ""))
+		clean := strings.TrimSpace(stripHTMLTagsStrict(s))
 		if len(clean) <= 15 {
 			return ""
 		}
