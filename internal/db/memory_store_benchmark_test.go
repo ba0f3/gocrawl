@@ -29,15 +29,15 @@ func BenchmarkMemoryStore_ClaimNextQueuedJob(b *testing.B) {
 
 		// If it runs out of queued jobs, add one back so we don't just return nil
 		if i%4000 == 0 && i > 0 {
-            b.StopTimer()
-            for j := 0; j < 1000; j++ {
-                store.CreateCrawlJob(&CrawlJob{
-                    ID:        "new" + strconv.Itoa(i) + "_" + strconv.Itoa(j),
-                    Status:    "queued",
-                    CreatedAt: time.Now(),
-                })
-            }
-            b.StartTimer()
+			b.StopTimer()
+			for j := 0; j < 1000; j++ {
+				store.CreateCrawlJob(&CrawlJob{
+					ID:        "new" + strconv.Itoa(i) + "_" + strconv.Itoa(j),
+					Status:    "queued",
+					CreatedAt: time.Now(),
+				})
+			}
+			b.StartTimer()
 		}
 	}
 }

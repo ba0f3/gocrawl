@@ -55,3 +55,7 @@
 **Vulnerability:** External HTTP client in the `chromescrape` fetchWebSocketDebuggerURL function was vulnerable to SSRF.
 **Learning:** `http.DefaultClient` was used to fetch the CDP configuration via an HTTP GET to a remote base URL. This lacked both timeout and SSRF protection.
 **Prevention:** Apply `utils.SafeTransport()` to all outgoing HTTP calls.
+## 2025-02-28 - [CRITICAL] Prevent DoS via Unbounded Gin Request Body Binding
+**Vulnerability:** Gin framework endpoints utilizing `c.ShouldBindJSON` inherently lack stream length limits, allowing clients to send infinitely large JSON payloads that can exhaust server memory before triggering normal middleware size constraints.
+**Learning:** Standard timeout configurations and default framework JSON bindings do not implicitly restrict incoming body size. A malicious user can pipeline massive payloads to endpoints parsing JSON, leading to out-of-memory panics and server crashes.
+**Prevention:** Implement and attach a global middleware that wraps `c.Request.Body` using `http.MaxBytesReader(w, req.Body, limit)`. This enforces a hard memory limit on all incoming requests globally, rejecting oversized payloads before they enter the application's binding or parsing logic.

@@ -244,7 +244,7 @@ func detectCSRFrameworkOrSPAShell(htmlStr string) (tag string, ok bool) {
 				innerHTMLBytes += len(n.Data)
 			} else if n.Type == html.ElementNode {
 				// Estimate tag length to approximate innerHTML size without rendering
-				innerHTMLBytes += len(n.Data) * 2 + 5 // <tag></tag>
+				innerHTMLBytes += len(n.Data)*2 + 5 // <tag></tag>
 				for _, a := range n.Attr {
 					innerHTMLBytes += len(a.Key) + len(a.Val) + 4 //  key="val"
 				}

@@ -96,10 +96,10 @@ func TestHasAnyLowercasePattern(t *testing.T) {
 			want:     true,
 		},
 		{
-		    name:     "empty pattern",
-		    s:        "test string",
-		    patterns: []string{""},
-		    want:     false,
+			name:     "empty pattern",
+			s:        "test string",
+			patterns: []string{""},
+			want:     false,
 		},
 	}
 

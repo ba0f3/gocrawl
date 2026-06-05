@@ -17,10 +17,10 @@ import (
 	"gocrawl/internal/utils"
 
 	"github.com/PuerkitoBio/goquery"
-	"golang.org/x/net/html"
 	"github.com/gocolly/colly/v2"
 	"github.com/gocolly/colly/v2/debug"
 	"github.com/gocolly/colly/v2/proxy"
+	"golang.org/x/net/html"
 )
 
 // ScrapeResult holds the result of a scrape
@@ -183,9 +183,9 @@ func buildResultFromMainHTMLWithDoc(contentHTML string, req *ScrapeRequest, full
 		baseURL, _ := url.Parse(req.URL)
 		if linkSelExplicit(req) {
 			doc.Find(strings.TrimSpace(req.LinkSelector)).Each(func(_ int, s *goquery.Selection) {
-					if href, ok := s.Attr("href"); ok {
-						appendResolvedHref(href, baseURL, &result.Links, seen)
-					}
+				if href, ok := s.Attr("href"); ok {
+					appendResolvedHref(href, baseURL, &result.Links, seen)
+				}
 			})
 		} else {
 			// ⚡ Bolt Optimization: Manually traverse x/net/html tree
