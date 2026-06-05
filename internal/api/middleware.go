@@ -273,3 +273,11 @@ func GinSecurityHeadersMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// GinBodyLimitMiddleware enforces a maximum body size for incoming requests to prevent DoS attacks.
+func GinBodyLimitMiddleware(limit int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
+		c.Next()
+	}
+}
