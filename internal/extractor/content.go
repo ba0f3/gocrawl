@@ -98,11 +98,41 @@ func RecoverMarkdownH1(doc *goquery.Document, md string) string {
 	if doc == nil {
 		return md
 	}
-	h1 := doc.Find("h1").First()
-	if h1.Length() == 0 {
-		return md
+
+	// ⚡ Bolt Optimization: Manually traverse x/net/html tree
+	// to avoid goquery.Find("h1") multi-selector allocation overhead.
+	var title string
+	var walk func(*html.Node) bool
+	walk = func(n *html.Node) bool {
+		if n.Type == html.ElementNode && n.Data == "h1" {
+			var buf strings.Builder
+			var extractText func(*html.Node)
+			extractText = func(nn *html.Node) {
+				if nn.Type == html.TextNode {
+					buf.WriteString(nn.Data)
+				}
+				for c := nn.FirstChild; c != nil; c = c.NextSibling {
+					extractText(c)
+				}
+			}
+			extractText(n)
+			title = strings.TrimSpace(buf.String())
+			return true
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if walk(c) {
+				return true
+			}
+		}
+		return false
 	}
-	title := strings.TrimSpace(h1.Text())
+
+	for _, n := range doc.Nodes {
+		if walk(n) {
+			break
+		}
+	}
+
 	if title == "" {
 		return md
 	}
