@@ -81,9 +81,31 @@ func ExtractMainHTML(doc *goquery.Document, _ string, opts *ExtractionOptions) (
 		}
 	}
 
-	body := doc.Find("body").First()
-	if body.Length() > 0 {
-		if h, e := body.Html(); e == nil {
+	// ⚡ Bolt Optimization: Manually traverse x/net/html tree
+	// to avoid goquery.Find("body") multi-selector allocation overhead.
+	var bodyNode *html.Node
+	var walkBody func(*html.Node) bool
+	walkBody = func(n *html.Node) bool {
+		if n.Type == html.ElementNode && n.Data == "body" {
+			bodyNode = n
+			return true
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if walkBody(c) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, n := range doc.Nodes {
+		if walkBody(n) {
+			break
+		}
+	}
+
+	if bodyNode != nil {
+		bodySel := &goquery.Selection{Nodes: []*html.Node{bodyNode}}
+		if h, e := bodySel.Html(); e == nil {
 			return h, nil
 		}
 	}
