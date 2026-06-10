@@ -67,15 +67,19 @@ func findBestCandidate(doc *goquery.Document, exclude map[*html.Node]struct{}) *
 
 	// ⚡ Bolt Optimization: Manually traverse x/net/html tree
 	// instead of using goquery.Find with a complex multi-selector which allocates heavily.
+	// We use a reusable goquery.Selection wrapper to avoid allocating for every candidate node.
+	selWrapper := &goquery.Selection{Nodes: make([]*html.Node, 1)}
+
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
 		if isCandidateNode(n) {
 			if !isExcluded(n, exclude) {
-				s := &goquery.Selection{Nodes: []*html.Node{n}}
-				if !IsNoise(s) && !IsNoiseDescendant(s) && !isUnderExcluded(s, exclude) {
-					sc := scoreNode(s)
+				selWrapper.Nodes[0] = n
+				if !IsNoise(selWrapper) && !IsNoiseDescendant(selWrapper) && !isUnderExcluded(selWrapper, exclude) {
+					sc := scoreNode(selWrapper)
 					if sc > 0 && (best == nil || sc > bestScore) {
-						best = s
+						// Only allocate a new selection when we find a new best
+						best = &goquery.Selection{Nodes: []*html.Node{n}}
 						bestScore = sc
 					}
 				}
