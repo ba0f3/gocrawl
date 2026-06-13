@@ -59,3 +59,8 @@
 **Vulnerability:** Gin framework endpoints utilizing `c.ShouldBindJSON` inherently lack stream length limits, allowing clients to send infinitely large JSON payloads that can exhaust server memory before triggering normal middleware size constraints.
 **Learning:** Standard timeout configurations and default framework JSON bindings do not implicitly restrict incoming body size. A malicious user can pipeline massive payloads to endpoints parsing JSON, leading to out-of-memory panics and server crashes.
 **Prevention:** Implement and attach a global middleware that wraps `c.Request.Body` using `http.MaxBytesReader(w, req.Body, limit)`. This enforces a hard memory limit on all incoming requests globally, rejecting oversized payloads before they enter the application's binding or parsing logic.
+
+## 2023-10-25 - SSRF / Local File Inclusion via Headless Browser (`chromedp`)
+**Vulnerability:** URL schemes were not validated before being passed to headless browsers via `chromedp`. This allowed an attacker to request `file:///etc/passwd` or `chrome://` protocols, leading to SSRF and Local File Inclusion (LFI).
+**Learning:** While the standard Go `http.Transport` naturally rejects `file://` schemes, headless browsers (like Chrome via `chromedp` or `Lightpanda`) natively support `file://`, `chrome://`, and other dangerous local schemes. Without explicit scheme validation, attackers can bypass application-level SSRF defenses and read arbitrary local files from the headless browser container's filesystem.
+**Prevention:** Always validate URL schemes explicitly (e.g., `u.Scheme == "http" || u.Scheme == "https"`) before passing URLs to headless browsers or external crawlers to ensure they only fetch remote web content.

@@ -313,6 +313,17 @@ func ScrapeURL(req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 
 func ScrapeURLWithContext(ctx context.Context, req *ScrapeRequest, cfg *config.Config) (*ScrapeResult, error) {
 	timeout := 30 * time.Second
+	if req == nil || req.URL == "" {
+		return nil, fmt.Errorf("request URL is required")
+	}
+	u, err := url.Parse(req.URL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL: %v", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported URL scheme: %q (only http and https are allowed)", u.Scheme)
+	}
+
 	if req.Timeout > 0 {
 		timeout = time.Duration(req.Timeout) * time.Second
 	} else if cfg != nil && cfg.Crawler.CrawlTimeout > 0 {

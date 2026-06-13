@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 
 	"gocrawl/internal/config"
@@ -173,6 +174,12 @@ func (h *Handler) Crawl(c *gin.Context) {
 	var req CrawlRequestBody
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeJSON(c, http.StatusBadRequest, nil, err)
+		return
+	}
+
+	u, err := url.Parse(req.URL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		writeJSON(c, http.StatusBadRequest, nil, fmt.Errorf("invalid URL scheme: only http and https are allowed"))
 		return
 	}
 
