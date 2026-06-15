@@ -95,9 +95,33 @@ func SummarizeMarkdown(ctx context.Context, cfg *config.Config, model, markdown 
 	return stripThinkingTags(text), nil
 }
 
+// ⚡ Bolt Optimization: Use zero-allocation fast-paths to bypass heavy regexp allocations
+// and state machine overhead when the target patterns (<think> and multiple whitespaces)
+// are not present in the string.
 func stripThinkingTags(s string) string {
-	s = thinkingTagRE.ReplaceAllString(s, " ")
-	s = wsRE.ReplaceAllString(s, " ")
+	if strings.Contains(s, "<think") {
+		s = thinkingTagRE.ReplaceAllString(s, " ")
+	}
+
+	// Fast path for whitespaces to avoid regex overhead.
+	// We need to run the regex if there are ANY non-space whitespace characters (like \n, \t, \r)
+	// or if there are multiple consecutive space characters.
+	needsWsReplace := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' || s[i] == '\t' || s[i] == '\r' || s[i] == '\v' || s[i] == '\f' {
+			needsWsReplace = true
+			break
+		}
+		if s[i] == ' ' && i < len(s)-1 && s[i+1] == ' ' {
+			needsWsReplace = true
+			break
+		}
+	}
+
+	if needsWsReplace {
+		s = wsRE.ReplaceAllString(s, " ")
+	}
+
 	return strings.TrimSpace(s)
 }
 
