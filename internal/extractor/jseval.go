@@ -408,9 +408,6 @@ func stripHTMLTagsStrict(s string) string {
 }
 
 func filterReadable(s string) string {
-	if len(s) <= 15 {
-		return ""
-	}
 	s = strings.TrimSpace(s)
 	if len(s) <= 15 {
 		return ""
@@ -436,7 +433,6 @@ func filterReadable(s string) string {
 			return ""
 		}
 	}
-
 	alphaSpace := 0
 	hasSeparator := false
 	for _, r := range s {

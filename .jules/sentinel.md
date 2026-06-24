@@ -64,3 +64,7 @@
 **Vulnerability:** URL schemes were not validated before being passed to headless browsers via `chromedp`. This allowed an attacker to request `file:///etc/passwd` or `chrome://` protocols, leading to SSRF and Local File Inclusion (LFI).
 **Learning:** While the standard Go `http.Transport` naturally rejects `file://` schemes, headless browsers (like Chrome via `chromedp` or `Lightpanda`) natively support `file://`, `chrome://`, and other dangerous local schemes. Without explicit scheme validation, attackers can bypass application-level SSRF defenses and read arbitrary local files from the headless browser container's filesystem.
 **Prevention:** Always validate URL schemes explicitly (e.g., `u.Scheme == "http" || u.Scheme == "https"`) before passing URLs to headless browsers or external crawlers to ensure they only fetch remote web content.
+
+## 2024-06-24 - Handle CI Trivy Scan failures by updating dependencies
+**Learning:** If the GitHub CI fails specifically in a `trivy` step scanning the docker image, it usually indicates outdated dependencies with known vulnerabilities (like `golang.org/x/crypto` or `golang.org/x/net`). We can fix this by updating to the latest versions of the packages via `go get -u golang.org/x/crypto golang.org/x/net`, followed by `go mod tidy` and testing the updates.
+**Action:** When seeing trivy scan failures on GitHub, update the vulnerable Go modules mentioned in the output.
