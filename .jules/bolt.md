@@ -290,3 +290,7 @@ Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) 
 ## 2024-05-09 - Fast-path regexp replacements in hot paths
 **Learning:** In string processing functions that unconditionally use `regexp.ReplaceAllString` (like `stripThinkingTags`), the standard library allocates memory and initializes a state machine even if the target pattern does not exist in the string. Furthermore, when creating a fast-path for replacing multiple whitespaces (`\s+`), checking only for adjacent whitespaces is incorrect, because the regex also handles replacing single tabs or newlines with spaces.
 **Action:** Always wrap heavy regexp executions in a fast-path check. For simple strings, use `strings.Contains` to check for tags. For whitespace flattening (`\s+`), iterate the string bytes and trigger the regex only if an unexpected whitespace (like `\n` or `\t`) or a double-space is found. This drops memory allocations to zero for strings that do not contain these patterns, massively improving throughput.
+
+## 2026-06-27 - Fast-path length check before TrimSpace
+**Learning:** Checking string length before expensive operations like strings.TrimSpace in hot loops bypasses unnecessary function call and byte-scanning overhead for strings guaranteed to fail minimum length constraints.
+**Action:** Always implement a fast-path length check before applying operations like strings.TrimSpace to strings with minimum length constraints.

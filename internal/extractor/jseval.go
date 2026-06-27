@@ -408,6 +408,10 @@ func stripHTMLTagsStrict(s string) string {
 }
 
 func filterReadable(s string) string {
+	// ⚡ Bolt Optimization: Fast-path length check before TrimSpace byte scanning
+	if len(s) <= 15 {
+		return ""
+	}
 	s = strings.TrimSpace(s)
 	if len(s) <= 15 {
 		return ""
