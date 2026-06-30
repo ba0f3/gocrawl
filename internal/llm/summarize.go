@@ -41,13 +41,25 @@ func SummarizeMarkdown(ctx context.Context, cfg *config.Config, model, markdown 
 			"Output ONLY the summary, nothing else. No introductions, no questions, no formatting, no preamble.",
 		maxSentences,
 	)
-	body := map[string]interface{}{
-		"model": model,
-		"messages": []map[string]string{
-			{"role": "system", "content": system},
-			{"role": "user", "content": markdown},
+	// ⚡ Bolt Optimization: Use anonymous struct instead of map[string]interface{}
+	// to avoid heap allocations and reflection overhead during json.Marshal
+	body := struct {
+		Model       string `json:"model"`
+		Messages    []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+		Temperature float64 `json:"temperature"`
+	}{
+		Model: model,
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{
+			{Role: "system", Content: system},
+			{Role: "user", Content: markdown},
 		},
-		"temperature": 0.3,
+		Temperature: 0.3,
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {

@@ -294,3 +294,7 @@ Never rely on manual, ad-hoc string slicing (e.g. splitting by `://`, `/`, `@`) 
 ## 2026-06-27 - Fast-path length check before TrimSpace
 **Learning:** Checking string length before expensive operations like strings.TrimSpace in hot loops bypasses unnecessary function call and byte-scanning overhead for strings guaranteed to fail minimum length constraints.
 **Action:** Always implement a fast-path length check before applying operations like strings.TrimSpace to strings with minimum length constraints.
+
+## 2025-03-09 - JSON Serialization Performance: Maps vs Anonymous Structs
+**Learning:** Using `map[string]interface{}` to dynamically build JSON payloads triggers heap allocations and invokes heavy reflection overhead during `json.Marshal` because the JSON encoder must iterate over arbitrary map keys and types.
+**Action:** When the structure of a JSON payload is known at compile time (like API request bodies or SSE events), define and instantiate an anonymous struct literal instead. This provides compile-time type safety, eliminates the map heap allocation, and allows `json.Marshal` to take a much faster, optimized path.
