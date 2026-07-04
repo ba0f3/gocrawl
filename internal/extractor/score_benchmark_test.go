@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/PuerkitoBio/goquery"
-
 )
 
 func BenchmarkScoreNode(b *testing.B) {
