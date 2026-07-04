@@ -54,7 +54,7 @@ func isCandidateNode(n *html.Node) bool {
 		return true
 	}
 	for _, a := range n.Attr {
-		if strings.EqualFold(a.Key, "role") && strings.EqualFold(a.Val, "main") {
+		if a.Key == "role" && strings.EqualFold(a.Val, "main") {
 			return true
 		}
 	}

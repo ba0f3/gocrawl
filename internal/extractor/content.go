@@ -49,7 +49,7 @@ func ExtractMainHTML(doc *goquery.Document, _ string, opts *ExtractionOptions) (
 				isMain := tag == "article" || tag == "main"
 				if !isMain {
 					for _, a := range n.Attr {
-						if strings.EqualFold(a.Key, "role") && strings.EqualFold(a.Val, "main") {
+						if a.Key == "role" && strings.EqualFold(a.Val, "main") {
 							isMain = true
 							break
 						}
